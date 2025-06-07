@@ -9,7 +9,7 @@ set -euo pipefail
 # Fan speed will be set linearly based on the actual temp between TGT and MAX.
 CPU_TGT=70
 CPU_MAX=80
-HDD_TGT=43
+HDD_TGT=40
 HDD_MAX=60
 MIN_FAN=64  # 25% of 255 (increase baseline to reduce fan speed variation)
 
