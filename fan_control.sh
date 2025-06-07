@@ -7,10 +7,10 @@ set -euo pipefail
 # TGT = desired healthy temp in Celcius to run at 15% fans
 # MAX = unhealthy temp to run at 100% fans
 # Fan speed will be set linearly based on the actual temp between TGT and MAX.
-CPU_TGT=50
-CPU_MAX=70
-HDD_TGT=32
-HDD_MAX=50
+CPU_TGT=70
+CPU_MAX=80
+HDD_TGT=47
+HDD_MAX=60
 MIN_FAN=39  # 15% of 255 (increase baseline to reduce fan speed variation)
 
 # SERVICE=true: loop once every 60s to set fan speed and temp, no LOGGING
@@ -117,7 +117,7 @@ set_fan_speed() {
 if $SERVICE; then
     while true; do
         set_fan_speed
-        sleep 60
+        sleep 1
     done
 else
     set_fan_speed
