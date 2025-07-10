@@ -57,8 +57,8 @@ while true; do
     hdd_str_plain="HDD $(IFS=, ; echo "${temps_output_plain[*]}" | sed 's/,/, /g')"
 
     timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    terminal_output="$timestamp: $raw (${percent}%) ($hdd_str_colored)"
-    log_output="$timestamp: $raw (${percent}%) ($hdd_str_plain)"
+    terminal_output=$(printf "%s: %3d (%d%%) (%s)" "$timestamp" "$raw" "$percent" "$hdd_str_colored")
+    log_output=$(printf "%s: %3d (%d%%) (%s)" "$timestamp" "$raw" "$percent" "$hdd_str_plain")
 
     echo -e "$terminal_output"
     echo "$log_output" >> pwm_log.txt
