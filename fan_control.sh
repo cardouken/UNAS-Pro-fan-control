@@ -13,9 +13,9 @@ CPU_TGT=70            # temperature where CPU fans start ramping up
 CPU_MAX=80            # temperature for full CPU fan
 
 # HDD fan curve parameters (piecewise)
-HDD_MIN_TEMP=43           # temp at which fans stay at baseline
+HDD_MIN_TEMP=42           # temp at which fans stay at baseline
 HDD_SMOOTH_MAX=49         # temp at which fans reach gentle top
-HDD_GENTLE_TOP=0.38       # fan % (0.38=38%) at HDD_SMOOTH_MAX
+HDD_GENTLE_TOP=0.45       # fan % (0.38=38%) at HDD_SMOOTH_MAX
 HDD_JUMP_TEMP=50          # temp at which fans jump to jump level
 HDD_JUMP_LEVEL=0.60       # fan % (0.60=60%) at jump temp
 HDD_AFTER_JUMP_STEP=0.05  # fan % (0.05=5%) to increase fans per °C above jump temp
