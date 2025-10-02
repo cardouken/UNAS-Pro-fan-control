@@ -1,12 +1,16 @@
 #!/bin/bash
 #
-# Fan control service for UNAS Pro with configurable piecewise linear fan curve. Based only on HDD temps.
+# Fan control service for UNAS Pro with configurable piecewise linear fan curve.
 #
 # See UNAS Pro fan speed curve calculator in Google Sheets to calculate the desired fan speed values:
 # https://docs.google.com/spreadsheets/d/1tRFY_sbZ05NGviTWXEZ2xo6C26Qct_KZbIP7jislLXI/edit?usp=sharing
 #
 
 set -euo pipefail
+
+# CPU fan curve parameters (simple linear)
+CPU_TGT=70            # temperature where CPU fans start ramping up
+CPU_MAX=80            # temperature for full CPU fan
 
 # HDD fan curve parameters (piecewise)
 HDD_MIN_TEMP=40           # temp at which fans stay at baseline
@@ -20,12 +24,18 @@ MIN_FAN=64                # baseline PWM to keep fans at (64=~25%)
 # Service parameters
 SERVICE_INTERVAL=3       # how often to check temperatures in service mode (seconds)
 
-# HDD devices arrays
+# CPU and HDD devices arrays
+cpu_devices=("hwmon/hwmon0/temp1_input" "hwmon/hwmon0/temp2_input" "hwmon/hwmon0/temp3_input" "thermal/thermal_zone0/temp")
 hdd_devices=(sda sdb sdc sdd sde sdf sdg)
 
 # Parameter checks
 if [ "$HDD_SMOOTH_MAX" -le "$HDD_MIN_TEMP" ]; then
     echo "Error: HDD_SMOOTH_MAX ($HDD_SMOOTH_MAX) must be greater than HDD_MIN_TEMP ($HDD_MIN_TEMP)" >&2
+    exit 1
+fi
+
+if [ "$CPU_MAX" -le "$CPU_TGT" ]; then
+    echo "Error: CPU_MAX ($CPU_MAX) must be greater than CPU_TGT ($CPU_TGT)" >&2
     exit 1
 fi
 
@@ -44,7 +54,23 @@ log_echo() {
 }
 
 read_all_temperatures() {
+    CPU_TEMP=0
     HDD_TEMP=0
+
+    # Read all CPU temperatures in quick succession
+    local cpu_temps=()
+    local dev temp
+    for dev in "${cpu_devices[@]}"; do
+        if [ -f "/sys/class/$dev" ]; then
+            temp=$(cat "/sys/class/$dev" 2>/dev/null || echo "0")
+            temp=$((temp / 1000))
+            cpu_temps+=("$temp")
+            log_echo "/sys/class/$dev CPU Temp: ${temp}°C"
+            if [[ "$temp" =~ ^[0-9]+$ ]] && [ "$temp" -gt "$CPU_TEMP" ]; then
+                CPU_TEMP=$temp
+            fi
+        fi
+    done
 
     # Read all HDD temperatures in quick succession
     local hdd_temps=()
@@ -65,15 +91,29 @@ read_all_temperatures() {
 
 
 calculate_fan_speeds() {
+    local cpu_temp=$1
     local hdd_temp=$2
     local fan_data
 
-    fan_data=$(awk -v hdd_temp="$hdd_temp" \
+    fan_data=$(awk -v cpu_temp="$cpu_temp" -v hdd_temp="$hdd_temp" \
+        -v cpu_tgt="$CPU_TGT" -v cpu_max="$CPU_MAX" \
         -v hdd_min_temp="$HDD_MIN_TEMP" -v hdd_smooth_max="$HDD_SMOOTH_MAX" \
         -v hdd_gentle_top="$HDD_GENTLE_TOP" -v hdd_jump_temp="$HDD_JUMP_TEMP" \
         -v hdd_jump_level="$HDD_JUMP_LEVEL" -v hdd_step="$HDD_AFTER_JUMP_STEP" \
         -v min_fan="$MIN_FAN" '
     BEGIN {
+        # CPU fan calculation
+        if (cpu_temp <= cpu_tgt) {
+            cpu_ratio = 0
+        } else if (cpu_temp >= cpu_max) {
+            cpu_ratio = 1
+        } else {
+            cpu_ratio = (cpu_temp - cpu_tgt) / (cpu_max - cpu_tgt)
+        }
+        if (cpu_ratio < 0) cpu_ratio = 0
+        if (cpu_ratio > 1) cpu_ratio = 1
+        cpu_fan = int(cpu_ratio * 255)
+
         # HDD fan calculation (piecewise curve)
         min_fan_ratio = min_fan / 255
         if (hdd_temp <= hdd_min_temp) {
@@ -88,24 +128,26 @@ calculate_fan_speeds() {
         }
         hdd_fan = int(hdd_fan_ratio * 255)
 
-        printf "%d", hdd_fan
+        printf "%d %d", cpu_fan, hdd_fan
     }')
 
-    read -r HDD_FAN <<< "$fan_data"
+    read -r CPU_FAN HDD_FAN <<< "$fan_data"
 }
 
 set_fan_speed() {
-    # Read temperatures from sensors
+    # Read CPU temperatures from sensors
     read_all_temperatures
 
     # Calculate all fan speeds in single AWK call
-    calculate_fan_speeds "$HDD_TEMP"
+    calculate_fan_speeds "$CPU_TEMP" "$HDD_TEMP"
 
-    # Final fan speed: max of HDD_FAN, and MIN_FAN
-    FAN_SPEED=$(( HDD_FAN < MIN_FAN ? MIN_FAN : HDD_FAN ))
+    # Final fan speed: max of CPU_FAN, HDD_FAN, and MIN_FAN
+    FAN_SPEED=$(( CPU_FAN > HDD_FAN ? CPU_FAN : HDD_FAN ))
+    FAN_SPEED=$(( FAN_SPEED < MIN_FAN ? MIN_FAN : FAN_SPEED ))
 
     # Logging
     log_echo "== Fan Decision =="
+    log_echo "CPU Temp: ${CPU_TEMP}°C → CPU Fan PWM: ${CPU_FAN} ($((CPU_FAN * 100 / 255))%)"
     log_echo "Max HDD Temp: ${HDD_TEMP}°C → HDD Fan PWM: ${HDD_FAN} ($((HDD_FAN * 100 / 255))%)"
     log_echo "Final Fan PWM: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
     log_echo "=================="
@@ -129,4 +171,3 @@ if $SERVICE; then
 else
     set_fan_speed
 fi
-
