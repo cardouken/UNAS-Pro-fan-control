@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-HOST="$1"
+HOST="${1:-root@192.168.1.25}"
 
 scp temp_monitor.sh "${HOST}:/root/temp_monitor.sh"
 

@@ -13,16 +13,16 @@ CPU_TGT=70            # temperature where CPU fans start ramping up
 CPU_MAX=80            # temperature for full CPU fan
 
 # HDD fan curve parameters (piecewise)
-HDD_MIN_TEMP=42           # temp at which fans stay at baseline
+HDD_MIN_TEMP=40           # temp at which fans stay at baseline
 HDD_SMOOTH_MAX=49         # temp at which fans reach gentle top
-HDD_GENTLE_TOP=0.45       # fan % (0.38=38%) at HDD_SMOOTH_MAX
+HDD_GENTLE_TOP=0.55       # fan % (0.38=38%) at HDD_SMOOTH_MAX
 HDD_JUMP_TEMP=50          # temp at which fans jump to jump level
-HDD_JUMP_LEVEL=0.60       # fan % (0.60=60%) at jump temp
+HDD_JUMP_LEVEL=0.65       # fan % (0.60=60%) at jump temp
 HDD_AFTER_JUMP_STEP=0.05  # fan % (0.05=5%) to increase fans per °C above jump temp
 MIN_FAN=64                # baseline PWM to keep fans at (64=~25%)
 
 # Service parameters
-SERVICE_INTERVAL=20       # how often to check temperatures in service mode (seconds)
+SERVICE_INTERVAL=3       # how often to check temperatures in service mode (seconds)
 
 # CPU and HDD devices arrays
 cpu_devices=("hwmon/hwmon0/temp1_input" "hwmon/hwmon0/temp2_input" "hwmon/hwmon0/temp3_input" "thermal/thermal_zone0/temp")
@@ -39,7 +39,7 @@ if [ "$CPU_MAX" -le "$CPU_TGT" ]; then
     exit 1
 fi
 
-# run as service: loop every 20s, otherwise run once with logging
+# run as service: loop every N seconds based on SERVICE_INTERVAL, otherwise run once with logging
 LOGGING=true
 SERVICE=false
 if [ "${1:-}" = "--service" ]; then

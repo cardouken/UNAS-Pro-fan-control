@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-HOST="$1"
+HOST="${1:-root@192.168.1.25}"
 
 scp fan_control.sh "${HOST}:/root/fan_control.sh"
 scp fan_control.service "${HOST}:/etc/systemd/system/fan_control.service"
