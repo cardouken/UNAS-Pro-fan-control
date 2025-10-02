@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Fan control service for UNAS Pro with configurable piecewise linear fan curve.
+# Fan control service for UNAS Pro with configurable piecewise linear fan curve. Based only on HDD temps.
 #
 # See UNAS Pro fan speed curve calculator in Google Sheets to calculate the desired fan speed values:
 # https://docs.google.com/spreadsheets/d/1tRFY_sbZ05NGviTWXEZ2xo6C26Qct_KZbIP7jislLXI/edit?usp=sharing
