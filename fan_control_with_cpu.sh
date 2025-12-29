@@ -13,31 +13,31 @@ CPU_TGT=70            # temperature where CPU fans start ramping up
 CPU_MAX=80            # temperature for full CPU fan
 
 # HDD fan curve parameters (piecewise)
-HDD_MIN_TEMP=40           # temp at which fans stay at baseline
-HDD_SMOOTH_MAX=49         # temp at which fans reach gentle top
-HDD_GENTLE_TOP=0.55       # fan % (0.38=38%) at HDD_SMOOTH_MAX
-HDD_JUMP_TEMP=50          # temp at which fans jump to jump level
-HDD_JUMP_LEVEL=0.65       # fan % (0.60=60%) at jump temp
+HDD_MIN_TEMP=43           # temp at which fans stay at baseline
+HDD_SMOOTH_MAX=47         # temp at which fans reach gentle top
+HDD_GENTLE_TOP=1.00       # fan % (0.38=38%) at HDD_SMOOTH_MAX
+HDD_JUMP_TEMP=47          # temp at which fans jump to jump level
+HDD_JUMP_LEVEL=1.00       # fan % (0.60=60%) at jump temp
 HDD_AFTER_JUMP_STEP=0.05  # fan % (0.05=5%) to increase fans per °C above jump temp
-MIN_FAN=64                # baseline PWM to keep fans at (64=~25%)
+MIN_FAN=204               # baseline PWM to keep fans at (64=~25%)
 
 # Service parameters
-SERVICE_INTERVAL=3       # how often to check temperatures in service mode (seconds)
+SERVICE_INTERVAL=1       # how often to check temperatures in service mode (seconds)
 
 # CPU and HDD devices arrays
 cpu_devices=("hwmon/hwmon0/temp1_input" "hwmon/hwmon0/temp2_input" "hwmon/hwmon0/temp3_input" "thermal/thermal_zone0/temp")
 hdd_devices=(sda sdb sdc sdd sde sdf sdg)
 
 # Parameter checks
-if [ "$HDD_SMOOTH_MAX" -le "$HDD_MIN_TEMP" ]; then
-    echo "Error: HDD_SMOOTH_MAX ($HDD_SMOOTH_MAX) must be greater than HDD_MIN_TEMP ($HDD_MIN_TEMP)" >&2
-    exit 1
-fi
-
-if [ "$CPU_MAX" -le "$CPU_TGT" ]; then
-    echo "Error: CPU_MAX ($CPU_MAX) must be greater than CPU_TGT ($CPU_TGT)" >&2
-    exit 1
-fi
+#if [ "$HDD_SMOOTH_MAX" -le "$HDD_MIN_TEMP" ]; then
+#    echo "Error: HDD_SMOOTH_MAX ($HDD_SMOOTH_MAX) must be greater than HDD_MIN_TEMP ($HDD_MIN_TEMP)" >&2
+#    exit 1
+#fi
+#
+#if [ "$CPU_MAX" -le "$CPU_TGT" ]; then
+#    echo "Error: CPU_MAX ($CPU_MAX) must be greater than CPU_TGT ($CPU_TGT)" >&2
+#    exit 1
+#fi
 
 # run as service: loop every N seconds based on SERVICE_INTERVAL, otherwise run once with logging
 LOGGING=true

@@ -6,6 +6,10 @@ set -euo pipefail
 hdd_devices=(sda sdb sdc sdd sde sdf sdg)
 MONITOR_INTERVAL=10       # how often to check temperatures (seconds)
 
+MQTT_HOST="192.168.1.111"
+MQTT_USER="homeassistant"
+MQTT_PASS="unas_password_123"
+
 # Store previous temps
 declare -A prev_temps=()
 
@@ -98,42 +102,51 @@ monitor_temperatures() {
     next_ts=$(date +%s)
 
     while true; do
-        # Get PWM raw value and percentage
         raw=$(cat /sys/class/hwmon/hwmon0/pwm1)
         percent=$(( raw * 100 / 255 ))
-
-        # Read all temperatures
         read_all_hdd_temperatures
 
-        # Format temperature output
+        # Format for terminal/log
         temp_output=$(format_temperature_output)
         temp_str_colored="${temp_output%|*}"
         temp_str_plain="${temp_output#*|}"
 
-        # Create output strings
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
         terminal_output=$(printf "%s: %3d (%d%%) (HDD %s)" "$timestamp" "$raw" "$percent" "$temp_str_colored")
         log_output=$(printf "%s: %3d (%d%%) (HDD %s)" "$timestamp" "$raw" "$percent" "$temp_str_plain")
 
-        # Output to terminal and log
         echo -e "$terminal_output"
         echo "$log_output" >> temp_monitor_log.txt
 
-        # Update previous temps for next iteration
+        # Publish each drive temp to MQTT
+        for dev in "${hdd_devices[@]}"; do
+            if [[ -n "${current_temps[$dev]:-}" ]]; then
+                temp="${current_temps[$dev]}"
+
+                # Auto-discovery config (only needs to be sent once, but sending repeatedly is fine)
+                mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+                    -t "homeassistant/sensor/unas_${dev}/config" \
+                    -m "{\"name\":\"UNAS ${dev} Temperature\",\"state_topic\":\"homeassistant/sensor/unas_${dev}/state\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"unique_id\":\"unas_${dev}_temp\"}" \
+                    -r
+
+                # Actual temperature value
+                mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+                    -t "homeassistant/sensor/unas_${dev}/state" \
+                    -m "$temp"
+            fi
+        done
+
         update_previous_temps
 
-        # Calculate when to run next (precise timing)
         next_ts=$((next_ts + MONITOR_INTERVAL))
         local sleep_time=$((next_ts - $(date +%s)))
 
         if (( sleep_time > 0 )); then
             sleep $sleep_time
         else
-            # If we're behind schedule, reset to now
             next_ts=$(date +%s)
         fi
     done
 }
-
 # Start monitoring
 monitor_temperatures
