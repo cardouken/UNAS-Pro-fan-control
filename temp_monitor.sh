@@ -97,13 +97,18 @@ update_previous_temps() {
 monitor_temperatures() {
     local next_ts raw percent timestamp
     local temp_output temp_str_colored temp_str_plain
-    local terminal_output log_output
+    local terminal_output log_output cpu_temp
 
     next_ts=$(date +%s)
 
     while true; do
         raw=$(cat /sys/class/hwmon/hwmon0/pwm1)
         percent=$(( raw * 100 / 255 ))
+
+        # Get CPU temperature
+        cpu_temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+        cpu_temp=$((cpu_temp / 1000))
+
         read_all_hdd_temperatures
 
         # Format for terminal/log
@@ -112,8 +117,8 @@ monitor_temperatures() {
         temp_str_plain="${temp_output#*|}"
 
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        terminal_output=$(printf "%s: %3d (%d%%) (HDD %s)" "$timestamp" "$raw" "$percent" "$temp_str_colored")
-        log_output=$(printf "%s: %3d (%d%%) (HDD %s)" "$timestamp" "$raw" "$percent" "$temp_str_plain")
+        terminal_output=$(printf "%s: %3d (%d%%) (CPU %d°C) (HDD %s)" "$timestamp" "$raw" "$percent" "$cpu_temp" "$temp_str_colored")
+        log_output=$(printf "%s: %3d (%d%%) (CPU %d°C) (HDD %s)" "$timestamp" "$raw" "$percent" "$cpu_temp" "$temp_str_plain")
 
         echo -e "$terminal_output"
         echo "$log_output" >> temp_monitor_log.txt
@@ -136,10 +141,7 @@ monitor_temperatures() {
             fi
         done
 
-        # Get and publish CPU temperature
-        cpu_temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
-        cpu_temp_c=$((cpu_temp / 1000))
-
+        # Publish CPU temperature to MQTT
         mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
             -t "homeassistant/sensor/unas_cpu/config" \
             -m "{\"name\":\"UNAS CPU Temperature\",\"state_topic\":\"homeassistant/sensor/unas_cpu/state\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"unique_id\":\"unas_cpu_temp\"}" \
@@ -147,7 +149,7 @@ monitor_temperatures() {
 
         mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
             -t "homeassistant/sensor/unas_cpu/state" \
-            -m "$cpu_temp_c"
+            -m "$cpu_temp"
 
         update_previous_temps
 
