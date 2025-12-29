@@ -123,7 +123,7 @@ monitor_temperatures() {
             if [[ -n "${current_temps[$dev]:-}" ]]; then
                 temp="${current_temps[$dev]}"
 
-                # Auto-discovery config (only needs to be sent once, but sending repeatedly is fine)
+                # Auto-discovery config
                 mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
                     -t "homeassistant/sensor/unas_${dev}/config" \
                     -m "{\"name\":\"UNAS ${dev} Temperature\",\"state_topic\":\"homeassistant/sensor/unas_${dev}/state\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"unique_id\":\"unas_${dev}_temp\"}" \
@@ -135,6 +135,19 @@ monitor_temperatures() {
                     -m "$temp"
             fi
         done
+
+        # Get and publish CPU temperature
+        cpu_temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+        cpu_temp_c=$((cpu_temp / 1000))
+
+        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+            -t "homeassistant/sensor/unas_cpu/config" \
+            -m "{\"name\":\"UNAS CPU Temperature\",\"state_topic\":\"homeassistant/sensor/unas_cpu/state\",\"unit_of_measurement\":\"°C\",\"device_class\":\"temperature\",\"unique_id\":\"unas_cpu_temp\"}" \
+            -r
+
+        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+            -t "homeassistant/sensor/unas_cpu/state" \
+            -m "$cpu_temp_c"
 
         update_previous_temps
 
@@ -148,5 +161,6 @@ monitor_temperatures() {
         fi
     done
 }
+
 # Start monitoring
 monitor_temperatures
