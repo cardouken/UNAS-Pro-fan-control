@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Install dependencies if missing
-PACKAGES=("mosquitto-clients" "nano")
+PACKAGES=("mosquitto-clients")
 MISSING=()
 
 for pkg in "${PACKAGES[@]}"; do

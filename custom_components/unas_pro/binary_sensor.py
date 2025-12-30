@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, get_device_info
 
 
 async def async_setup_entry(
@@ -39,12 +39,9 @@ class UNASBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
         self._key = key
         self._attr_name = f"UNAS Pro {name}"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = get_device_info(
+            coordinator.entry.entry_id, coordinator.ssh_manager.host
+        )
 
     @property
     def is_on(self) -> bool:

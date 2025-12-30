@@ -20,6 +20,17 @@ UNAS_SYSTEMD_DIR = "/etc/systemd/system"
 # services
 SERVICE_REINSTALL_SCRIPTS = "reinstall_scripts"
 
+
+# device info
+def get_device_info(entry_id: str, host: str) -> dict:
+    return {
+        "identifiers": {(DOMAIN, entry_id)},
+        "name": f"UNAS Pro ({host})",
+        "manufacturer": "Ubiquiti",
+        "model": "UNAS Pro",
+    }
+
+
 # attributes
 ATTR_SCRIPTS_INSTALLED = "scripts_installed"
 ATTR_SSH_CONNECTED = "ssh_connected"

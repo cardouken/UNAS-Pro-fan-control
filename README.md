@@ -161,6 +161,47 @@ Common issues:
 Scripts are reinstalled automatically. If needed, manually reinstall via the "Reinstall Scripts" button on the device
 page.
 
+### Uninstalling the Integration
+
+Removing the integration completely reverts any changes made by this integration on your UNAS Pro:
+
+- Stops and disables installed systemd services (`unas_monitor`, `fan_control`)
+- Removes all installed scripts and service files
+- Restores UNAS fan control to stock behavior
+- No manual cleanup required
+
+Your UNAS will return to its original state as if the integration was never installed.
+
+**Manual Cleanup (if needed):**
+
+If automatic cleanup fails or you need to manually remove everything (this is also what the integration would run on uninstall):
+
+```bash
+ssh root@YOUR_UNAS_IP
+
+# stop services
+systemctl stop unas_monitor
+systemctl stop fan_control
+
+# disable services
+systemctl disable unas_monitor
+systemctl disable fan_control
+
+# remove service files
+rm -f /etc/systemd/system/unas_monitor.service
+rm -f /etc/systemd/system/fan_control.service
+
+# remove scripts
+rm -f /root/unas_monitor.sh
+rm -f /root/fan_control.sh
+
+# remove state files
+rm -f /tmp/fan_mode
+
+# reload systemd
+systemctl daemon-reload
+```
+
 ## Credits
 
 - **Fan control concept**: [hoxxep/UNAS-Pro-fan-control](https://github.com/hoxxep/UNAS-Pro-fan-control)

@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,12 +67,9 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
         self._unsubscribe_speed = None
         self._unsubscribe_mode = None
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = get_device_info(
+            coordinator.entry.entry_id, coordinator.ssh_manager.host
+        )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -218,12 +215,9 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
 
         self._mqtt_topic = f"homeassistant/unas/fan_curve/{key}"
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = get_device_info(
+            coordinator.entry.entry_id, coordinator.ssh_manager.host
+        )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

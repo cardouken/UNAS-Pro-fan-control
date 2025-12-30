@@ -88,10 +88,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload integration and clean up UNAS."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         data = hass.data[DOMAIN].pop(entry.entry_id)
+        
+        # Clean up MQTT subscription
         await data["mqtt_client"].async_unsubscribe()
-        await data["ssh_manager"].disconnect()
+        
+        # Stop and remove services from UNAS to restore stock behavior
+        ssh_manager = data["ssh_manager"]
+        try:
+            _LOGGER.info("Cleaning up UNAS services and scripts...")
+            
+            # stop services
+            await ssh_manager.execute_command("systemctl stop unas_monitor || true")
+            await ssh_manager.execute_command("systemctl stop fan_control || true")
+            
+            # disable services
+            await ssh_manager.execute_command("systemctl disable unas_monitor || true")
+            await ssh_manager.execute_command("systemctl disable fan_control || true")
+            
+            # remove service files
+            await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
+            await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
+            
+            # remove scripts
+            await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
+            await ssh_manager.execute_command("rm -f /root/fan_control.sh")
+            
+            # remove state files
+            await ssh_manager.execute_command("rm -f /tmp/fan_mode")
+            
+            # reload systemd
+            await ssh_manager.execute_command("systemctl daemon-reload")
+            
+            _LOGGER.info("Successfully cleaned up UNAS - restored to stock fan control")
+        except Exception as err:
+            _LOGGER.error("Failed to clean up UNAS (non-critical): %s", err)
+        
+        # Disconnect SSH
+        await ssh_manager.disconnect()
 
     return unload_ok
 
@@ -108,6 +144,8 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         self.ssh_manager = ssh_manager
         self.mqtt_client = mqtt_client
         self.entry = entry
+        self.sensor_add_entities = None
+        self._discovered_bays = set()
 
         super().__init__(
             hass,
@@ -133,9 +171,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             mqtt_data = self.mqtt_client.get_data()
 
             # check for new drives when sensor platform is ready
-            if hasattr(self, "sensor_add_entities") and hasattr(
-                self, "_discovered_bays"
-            ):
+            if self.sensor_add_entities:
                 from .sensor import _discover_and_add_drive_sensors
 
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)

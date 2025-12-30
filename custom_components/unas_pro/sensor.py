@@ -20,7 +20,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -180,9 +180,6 @@ async def async_setup_entry(
 
     # store add_entities callback for dynamic drive sensor creation
     coordinator.sensor_add_entities = async_add_entities
-    coordinator._discovered_bays = (
-        set()
-    )  # Track which bays we've already created sensors for
 
     # schedule initial drive sensor discovery after a delay to let MQTT data arrive
     async def discover_drives():
@@ -271,12 +268,9 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
         if icon:
             self._attr_icon = icon
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = get_device_info(
+            coordinator.entry.entry_id, coordinator.ssh_manager.host
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -302,12 +296,9 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_viz"
         self._attr_icon = "mdi:chart-line"
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = get_device_info(
+            coordinator.entry.entry_id, coordinator.ssh_manager.host
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
