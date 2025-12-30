@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Fan control service for UNAS Pro with simple linear fan curve, optimized for Noctua NF-A8 PWM
+# Fan control service for UNAS Pro with simple linear fan curve, optimized for Noctua NF-A8 PWM.
+# Allows overriding this custom fan curve with a persistent value from HA that can be toggled on or set to auto.
 #
 
 set -euo pipefail
@@ -14,6 +15,12 @@ set -euo pipefail
 
 MIN_FAN=204               # 80% baseline
 SERVICE_INTERVAL=1        # how often to check temperatures (seconds)
+
+# MQTT config for override control
+MQTT_HOST="192.168.1.111"
+MQTT_USER="homeassistant"
+MQTT_PASS="unas_password_123"
+OVERRIDE_FILE="/tmp/fan_override"
 
 # HDD devices
 hdd_devices=(sda sdb sdc sdd sde sdf sdg)
@@ -29,6 +36,29 @@ fi
 log_echo() {
     if $LOGGING; then
         echo "$@"
+    fi
+}
+
+# Check for MQTT override
+check_mqtt_override() {
+    # Subscribe to override topic and write to file (timeout after 0.5s)
+    timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+        -t "homeassistant/unas/fan_override" -C 1 2>/dev/null > "$OVERRIDE_FILE" || true
+}
+
+get_override_value() {
+    if [ -f "$OVERRIDE_FILE" ]; then
+        local override_val=$(cat "$OVERRIDE_FILE" 2>/dev/null || echo "")
+        # Check if it's "auto" or a valid number 0-255
+        if [ "$override_val" = "auto" ]; then
+            echo "auto"
+        elif [[ "$override_val" =~ ^[0-9]+$ ]] && [ "$override_val" -ge 0 ] && [ "$override_val" -le 255 ]; then
+            echo "$override_val"
+        else
+            echo "auto"
+        fi
+    else
+        echo "auto"
     fi
 }
 
@@ -72,12 +102,37 @@ set_fan_speed() {
     echo 1 > /sys/class/hwmon/hwmon0/pwm1_enable 2>/dev/null || true
     echo 1 > /sys/class/hwmon/hwmon0/pwm2_enable 2>/dev/null || true
 
-    read_hdd_temperatures
-    calculate_fan_speed "$HDD_TEMP"
+    # Check for override every iteration
+    check_mqtt_override
+    local override=$(get_override_value)
 
-    log_echo "== Fan Decision =="
-    log_echo "Max HDD Temp: ${HDD_TEMP}°C → Fan PWM: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
-    log_echo "=================="
+    if [ "$override" != "auto" ]; then
+        FAN_SPEED=$override
+        echo "MANUAL OVERRIDE MODE ACTIVE: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
+
+        # Publish override fan speed
+        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+            -t "homeassistant/sensor/unas_fan_speed/state" \
+            -m "$FAN_SPEED"
+    else
+        read_hdd_temperatures
+        calculate_fan_speed "$HDD_TEMP"
+
+        log_echo "== Fan Decision =="
+        log_echo "Max HDD Temp: ${HDD_TEMP}°C → Fan PWM: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
+        log_echo "=================="
+
+        # Publish auto-calculated fan speed
+        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+            -t "homeassistant/sensor/unas_fan_speed/state" \
+            -m "$FAN_SPEED"
+    fi
+
+    # Auto-discovery config (publish once per iteration is fine)
+    mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+        -t "homeassistant/sensor/unas_fan_speed/config" \
+        -m "{\"name\":\"UNAS Fan Speed\",\"state_topic\":\"homeassistant/sensor/unas_fan_speed/state\",\"unit_of_measurement\":\"PWM\",\"unique_id\":\"unas_fan_speed\"}" \
+        -r
 
     # Apply fan speed
     echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm1
