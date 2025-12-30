@@ -29,6 +29,20 @@ MQTT_PASS="unas_password_123"
 # Device identifiers for grouping
 UNAS_DEVICE='{"identifiers":["unas_pro"],"name":"UNAS Pro","manufacturer":"Ubiquiti","model":"UNAS Pro"}'
 
+# UNAS Pro bay mapping (ATA port -> physical bay number as shown in Unifi UI)
+# Physical layout: Top row (L-R): 1,2,3  Bottom row (L-R): 4,5,6,7
+# Mapping is based on UNAS Pro hardware design
+declare -A ATA_TO_BAY_MAP=(
+    ["1"]="6"   # ata1 -> Bay 6 (bottom middle-right)
+    ["2"]="7"   # ata2 -> Bay 7 (bottom right)
+    ["3"]="0"   # ata3 -> Not used for UNAS Pro with 7 bays?
+    ["4"]="3"   # ata4 -> Bay 3 (top right)
+    ["5"]="5"   # ata5 -> Bay 5 (bottom middle-left)
+    ["6"]="2"   # ata6 -> Bay 2 (top middle)
+    ["7"]="4"   # ata7 -> Bay 4 (bottom left)
+    ["8"]="1"   # ata8 -> Bay 1 (top left)
+)
+
 # Auto-detect all SATA/NVMe drives (excludes loop, ram, etc.)
 detect_drives() {
     local drives=()
@@ -38,6 +52,21 @@ detect_drives() {
         fi
     done
     echo "${drives[@]}"
+}
+
+# Get physical bay number from device name
+get_bay_number() {
+    local dev=$1
+    local ata_port
+    
+    # Get ATA port number from udev path
+    ata_port=$(udevadm info -q path -n "/dev/$dev" 2>/dev/null | grep -oP 'ata\K[0-9]+' || echo "")
+    
+    if [ -n "$ata_port" ] && [ -n "${ATA_TO_BAY_MAP[$ata_port]:-}" ]; then
+        echo "${ATA_TO_BAY_MAP[$ata_port]}"
+    else
+        echo "unknown"
+    fi
 }
 
 # Helper function to publish MQTT sensor with device grouping
@@ -104,7 +133,7 @@ read_system_info() {
 # Function to read comprehensive drive data (SMART attributes + disk usage)
 read_drive_data() {
     local dev smart_output temp model serial rpm status health power_hours bad_sectors firmware
-    local total_size_bytes total_size_tb used_size_tb manufacturer
+    local total_size_bytes total_size_tb manufacturer bay_num
     local hdd_devices
 
     # Get list of drives dynamically
@@ -115,7 +144,15 @@ read_drive_data() {
             continue
         fi
 
-        # Get SMART data in one call
+        # Get physical bay number
+        bay_num=$(get_bay_number "$dev")
+        
+        # Skip drives with unknown or invalid bay numbers
+        if [ "$bay_num" = "unknown" ] || [ "$bay_num" = "0" ]; then
+            continue
+        fi
+
+        # Get SMART data
         smart_output=$(timeout 10 smartctl -a "/dev/$dev" 2>/dev/null || echo "")
         
         if [ -z "$smart_output" ]; then
@@ -130,7 +167,7 @@ read_drive_data() {
         power_hours=$(echo "$smart_output" | awk '/Power_On_Hours/ {print $10; exit} /power on hours/ {print $4; exit}' || echo "0")
         bad_sectors=$(echo "$smart_output" | awk '/Reallocated_Sector_Ct/ {print $10; exit} /reallocated sectors/ {print $4; exit}' || echo "0")
         
-        # Parse RPM - try multiple patterns
+        # Parse RPM
         rpm=$(echo "$smart_output" | awk -F': ' '/Rotation Rate:/ {print $2}' | xargs)
         if [ -z "$rpm" ] || [ "$rpm" = "Solid State Device" ]; then
             rpm="SSD"
@@ -140,7 +177,7 @@ read_drive_data() {
             [ -z "$rpm" ] && rpm="unknown"
         fi
         
-        # Extract manufacturer from model (usually first word)
+        # Extract manufacturer from model (usually just the first word)
         manufacturer=$(echo "$model" | awk '{print $1}')
         
         # SMART health status
@@ -155,31 +192,28 @@ read_drive_data() {
         total_size_bytes=$(blockdev --getsize64 "/dev/$dev" 2>/dev/null || echo "0")
         total_size_tb=$(awk "BEGIN {printf \"%.2f\", $total_size_bytes / 1024 / 1024 / 1024 / 1024}")
         
-        # Try to get used size from storage pool (this is approximate)
-        used_size_tb="$total_size_tb"  # Placeholder
-        
         # Allocation info
-        allocation="Storage Pool 1"
+        allocation="Storage Pool 1, RAID Group 1"
 
-        # Build device definition with actual manufacturer and model
-        local drive_device="{\"identifiers\":[\"unas_drive_${dev}\"],\"name\":\"UNAS Drive ${dev^^}\",\"manufacturer\":\"$manufacturer\",\"model\":\"$model\",\"serial_number\":\"$serial\",\"hw_version\":\"$firmware\",\"via_device\":\"unas_pro\"}"
+        # Build device definition with bay number in name
+        local drive_name="HDD $bay_num"
+        local drive_device="{\"identifiers\":[\"unas_drive_bay${bay_num}\"],\"name\":\"UNAS $drive_name\",\"manufacturer\":\"$manufacturer\",\"model\":\"$model\",\"serial_number\":\"$serial\",\"hw_version\":\"$firmware\",\"via_device\":\"unas_pro\"}"
 
-        # Publish all drive attributes grouped under this drive's device
-        publish_mqtt_sensor "unas_${dev}_temperature" "${dev^^} Temperature" "$temp" "°C" "temperature" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_model" "${dev^^} Model" "$model" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_serial" "${dev^^} Serial Number" "$serial" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_rpm" "${dev^^} RPM" "$rpm" "rpm" "" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_firmware" "${dev^^} Firmware" "$firmware" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_status" "${dev^^} Status" "$status" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_allocation" "${dev^^} Allocation" "$allocation" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_total_size" "${dev^^} Total Size" "$total_size_tb" "TB" "data_size" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_used_size" "${dev^^} Used Size" "$used_size_tb" "TB" "data_size" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_power_hours" "${dev^^} Power-On Hours" "$power_hours" "h" "duration" "$drive_device"
-        publish_mqtt_sensor "unas_${dev}_bad_sectors" "${dev^^} Bad Sectors" "$bad_sectors" "" "" "$drive_device"
+        # Publish all drive attributes grouped under this drive's device (using bay number)
+        publish_mqtt_sensor "unas_bay${bay_num}_temperature" "$drive_name Temperature" "$temp" "°C" "temperature" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_model" "$drive_name Model" "$model" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_serial" "$drive_name Serial Number" "$serial" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_rpm" "$drive_name RPM" "$rpm" "rpm" "" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_firmware" "$drive_name Firmware" "$firmware" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_status" "$drive_name Status" "$status" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_allocation" "$drive_name Allocation" "$allocation" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_total_size" "$drive_name Total Size" "$total_size_tb" "TB" "data_size" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_power_hours" "$drive_name Power-On Hours" "$power_hours" "h" "duration" "$drive_device"
+        publish_mqtt_sensor "unas_bay${bay_num}_bad_sectors" "$drive_name Bad Sectors" "$bad_sectors" "" "" "$drive_device"
     done
 }
 
-# Function to format temperature output for console logging
+# Format temperature output for console logging
 format_temperature_output() {
     local temps_output=()
     local dev temp smart_output
@@ -210,7 +244,7 @@ format_temperature_output() {
     echo "$output"
 }
 
-# Function to read storage pool usage
+# Read storage pool usage
 read_storage_usage() {
     local pool_num=1
     local temp_file="/tmp/df_output.$$"
