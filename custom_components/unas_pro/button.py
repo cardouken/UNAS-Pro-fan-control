@@ -7,7 +7,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, get_device_info
 
 
 async def async_setup_entry(
@@ -28,12 +28,9 @@ class UNASReinstallScriptsButton(CoordinatorEntity, ButtonEntity):
         self._attr_name = "UNAS Pro Reinstall Scripts"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_reinstall_scripts"
         self._attr_icon = "mdi:cog-refresh"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = get_device_info(
+            coordinator.entry.entry_id, coordinator.ssh_manager.host
+        )
 
     async def async_press(self) -> None:
         await self.coordinator.async_reinstall_scripts()

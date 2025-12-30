@@ -45,7 +45,7 @@ class SSHManager:
                 username=self.username,
                 password=self.password,
                 client_keys=[self.ssh_key] if self.ssh_key else None,
-                known_hosts=None,  # accept any host key (not ideal but necessary for NAS)
+                known_hosts=None,  # ignore host key (NAS IP might change or be redirected)
             )
             _LOGGER.info("SSH connection established to %s", self.host)
         except Exception as err:

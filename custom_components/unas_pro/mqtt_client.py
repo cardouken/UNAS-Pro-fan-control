@@ -24,7 +24,7 @@ class UNASMQTTClient:
 
         # subscribe to all UNAS sensor topics (state and config)
         # use single-level wildcard for sensor name, then # for rest
-        sensor_topic = "homeassistant/sensor/+/+"
+        sensor_topic = "homeassistant/sensor/unas_#"
 
         try:
             subscription = await mqtt.async_subscribe(
@@ -93,7 +93,8 @@ class UNASMQTTClient:
         # notify coordinator of new data (trigger entity updates)
         if hasattr(self, "_coordinator") and self._coordinator:
             # Trigger a manual refresh without fetching SSH data
-            self.hass.async_create_task(self._coordinator.async_request_refresh())
+            # Throttle updates to avoid excessive refreshing
+            self._coordinator.async_set_updated_data(self.get_data())
 
     @callback
     def _fan_curve_message_received(self, msg) -> None:
@@ -118,6 +119,10 @@ class UNASMQTTClient:
 
         self._data[f"fan_curve_{param_name}"] = value
         _LOGGER.debug("Stored fan curve: fan_curve_%s = %s", param_name, value)
+
+        # notify coordinator of new data
+        if hasattr(self, "_coordinator") and self._coordinator:
+            self._coordinator.async_set_updated_data(self.get_data())
 
     def get_data(self) -> dict[str, Any]:
         _LOGGER.debug("get_data called, returning %d keys", len(self._data))

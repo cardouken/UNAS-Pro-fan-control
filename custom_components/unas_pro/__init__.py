@@ -108,6 +108,8 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         self.ssh_manager = ssh_manager
         self.mqtt_client = mqtt_client
         self.entry = entry
+        self.sensor_add_entities = None
+        self._discovered_bays = set()
 
         super().__init__(
             hass,
@@ -133,9 +135,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             mqtt_data = self.mqtt_client.get_data()
 
             # check for new drives when sensor platform is ready
-            if hasattr(self, "sensor_add_entities") and hasattr(
-                self, "_discovered_bays"
-            ):
+            if self.sensor_add_entities:
                 from .sensor import _discover_and_add_drive_sensors
 
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
