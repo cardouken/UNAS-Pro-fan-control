@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/release/cardouken/homeassistant-unas-pro.svg)](https://github.com/cardouken/homeassistant-unas-pro/releases)
-[![License](https://img.shields.io/github/license/cardouken/homessistant-unas-pro.svg)](LICENSE.md)
+[![License](https://img.shields.io/github/license/cardouken/homeassistant-unas-pro.svg)](LICENSE.md)
 
 Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integration.
 
