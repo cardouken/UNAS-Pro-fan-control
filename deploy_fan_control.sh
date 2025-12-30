@@ -6,7 +6,7 @@ set -euo pipefail
 
 HOST="${1:-root@192.168.1.25}"
 
-scp fan_control_with_cpu.sh "${HOST}:/root/fan_control.sh"
+scp fan_control.sh "${HOST}:/root/fan_control.sh"
 scp fan_control.service "${HOST}:/etc/systemd/system/fan_control.service"
 
 ssh "$HOST" -t '\
