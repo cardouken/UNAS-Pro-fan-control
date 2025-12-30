@@ -130,7 +130,7 @@ read_system_info() {
     publish_mqtt_sensor "unas_memory_usage" "Memory Usage" "$mem_percent" "%" "" "$UNAS_DEVICE"
 }
 
-# Function to read comprehensive drive data (SMART attributes + disk usage)
+# Read drive data (SMART attributes + disk usage)
 read_drive_data() {
     local dev smart_output temp model serial rpm status health power_hours bad_sectors firmware
     local total_size_bytes total_size_tb manufacturer bay_num
@@ -146,15 +146,12 @@ read_drive_data() {
 
         # Get physical bay number
         bay_num=$(get_bay_number "$dev")
-        
-        # Skip drives with unknown or invalid bay numbers
         if [ "$bay_num" = "unknown" ] || [ "$bay_num" = "0" ]; then
             continue
         fi
 
         # Get SMART data
         smart_output=$(timeout 10 smartctl -a "/dev/$dev" 2>/dev/null || echo "")
-        
         if [ -z "$smart_output" ]; then
             continue
         fi
@@ -192,24 +189,20 @@ read_drive_data() {
         total_size_bytes=$(blockdev --getsize64 "/dev/$dev" 2>/dev/null || echo "0")
         total_size_tb=$(awk "BEGIN {printf \"%.2f\", $total_size_bytes / 1024 / 1024 / 1024 / 1024}")
         
-        # Allocation info
-        allocation="Storage Pool 1, RAID Group 1"
-
         # Build device definition with bay number in name
         local drive_name="HDD $bay_num"
         local drive_device="{\"identifiers\":[\"unas_drive_bay${bay_num}\"],\"name\":\"UNAS $drive_name\",\"manufacturer\":\"$manufacturer\",\"model\":\"$model\",\"serial_number\":\"$serial\",\"hw_version\":\"$firmware\",\"via_device\":\"unas_pro\"}"
 
         # Publish all drive attributes grouped under this drive's device (using bay number)
-        publish_mqtt_sensor "unas_bay${bay_num}_temperature" "$drive_name Temperature" "$temp" "°C" "temperature" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_model" "$drive_name Model" "$model" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_serial" "$drive_name Serial Number" "$serial" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_rpm" "$drive_name RPM" "$rpm" "rpm" "" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_firmware" "$drive_name Firmware" "$firmware" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_status" "$drive_name Status" "$status" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_allocation" "$drive_name Allocation" "$allocation" "" "" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_total_size" "$drive_name Total Size" "$total_size_tb" "TB" "data_size" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_power_hours" "$drive_name Power-On Hours" "$power_hours" "h" "duration" "$drive_device"
-        publish_mqtt_sensor "unas_bay${bay_num}_bad_sectors" "$drive_name Bad Sectors" "$bad_sectors" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_temperature" "Temperature" "$temp" "°C" "temperature" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_model" "Model" "$model" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_serial" "Serial Number" "$serial" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_rpm" "RPM" "$rpm" "rpm" "" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_firmware" "Firmware" "$firmware" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_status" "Status" "$status" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_total_size" "Total Size" "$total_size_tb" "TB" "data_size" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_power_hours" "Power-On Hours" "$power_hours" "h" "duration" "$drive_device"
+        publish_mqtt_sensor "unas_hdd_${bay_num}_bad_sectors" "Bad Sectors" "$bad_sectors" "" "" "$drive_device"
     done
 }
 
