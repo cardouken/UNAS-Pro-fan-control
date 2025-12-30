@@ -180,16 +180,12 @@ async def async_setup_entry(
 
     # store add_entities callback for dynamic drive sensor creation
     coordinator.sensor_add_entities = async_add_entities
+    coordinator._discovered_bays = set()  # Track which bays we've already created sensors for
 
-    # Schedule drive sensor discovery after a delay to let MQTT data arrive
+    # schedule initial drive sensor discovery after a delay to let MQTT data arrive
     async def discover_drives():
         await asyncio.sleep(10)  # Wait 10 seconds for MQTT data
         await _discover_and_add_drive_sensors(coordinator, async_add_entities)
-        
-        # If no drives found, retry after 10 more seconds
-        if not hasattr(coordinator, '_drives_discovered') or not coordinator._drives_discovered:
-            await asyncio.sleep(10)
-            await _discover_and_add_drive_sensors(coordinator, async_add_entities)
 
     hass.async_create_task(discover_drives())
 
@@ -201,7 +197,7 @@ async def _discover_and_add_drive_sensors(
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_bays = set()
 
-    _LOGGER.info(
+    _LOGGER.debug(
         "Discovering drives from MQTT data. Available keys: %d", len(mqtt_data)
     )
 
@@ -211,19 +207,19 @@ async def _discover_and_add_drive_sensors(
             bay_num = key.split("_")[2]
             detected_bays.add(bay_num)
 
-    if not detected_bays:
-        _LOGGER.warning(
-            "No drives detected yet. Will retry on next coordinator update."
-        )
-        coordinator._drives_discovered = False
+    # only process bays we haven't seen before
+    new_bays = detected_bays - coordinator._discovered_bays
+    
+    if not new_bays:
+        if not detected_bays:
+            _LOGGER.debug("No drives detected in MQTT data yet")
         return
 
-    _LOGGER.info("Discovered drive bays: %s", sorted(detected_bays))
-    coordinator._drives_discovered = True
+    _LOGGER.info("Discovered new drive bays: %s (total: %s)", sorted(new_bays), sorted(detected_bays))
 
-    # create sensors for each detected bay
+    # create sensors for each newly detected bay
     entities = []
-    for bay_num in sorted(detected_bays):
+    for bay_num in sorted(new_bays):
         for sensor_suffix, name, unit, device_class, state_class, icon in DRIVE_SENSORS:
             mqtt_key = f"unas_hdd_{bay_num}_{sensor_suffix}"
             full_name = f"HDD {bay_num} {name}"
@@ -242,8 +238,9 @@ async def _discover_and_add_drive_sensors(
 
     if entities:
         async_add_entities(entities)
+        coordinator._discovered_bays.update(new_bays)
         _LOGGER.info(
-            "Added %d drive sensors for %d bays", len(entities), len(detected_bays)
+            "Added %d drive sensors for %d new bays", len(entities), len(new_bays)
         )
 
 

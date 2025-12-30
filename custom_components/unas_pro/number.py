@@ -19,8 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 FAN_CURVE_PARAMS = [
     ("min_temp", "Min Temperature", 30, 50, 43, "°C", "mdi:thermometer-low"),
     ("max_temp", "Max Temperature", 45, 60, 47, "°C", "mdi:thermometer-high"),
-    ("min_fan", "Min Fan Speed", 0, 255, 204, "PWM", "mdi:fan-speed-1"),
-    ("max_fan", "Max Fan Speed", 0, 255, 255, "PWM", "mdi:fan-speed-3"),
+    ("min_fan", "Min Fan Speed", 0, 100, 80, "%", "mdi:fan-speed-1"),
+    ("max_fan", "Max Fan Speed", 0, 100, 100, "%", "mdi:fan-speed-3"),
 ]
 
 
@@ -29,9 +29,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: UNASDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id][
-        "coordinator"
-    ]
+    coordinator: UNASDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     entities = [
         UNASFanSpeedNumber(coordinator, hass),
@@ -40,12 +38,11 @@ async def async_setup_entry(
     # add fan curve configuration entities
     for key, name, min_val, max_val, default, unit, icon in FAN_CURVE_PARAMS:
         entities.append(
-            UNASFanCurveNumber(
-                coordinator, hass, key, name, min_val, max_val, default, unit, icon
-            )
+            UNASFanCurveNumber(coordinator, hass, key, name, min_val, max_val, default, unit, icon)
         )
 
     async_add_entities(entities)
+
 
 class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator, hass: HomeAssistant) -> None:
@@ -62,7 +59,7 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
         self._current_value = None
         self._current_mode = None
         self._unsubscribe_speed = None
-        self._unsubscribe_override = None
+        self._unsubscribe_mode = None
 
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
@@ -89,9 +86,8 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
                 _LOGGER.error("Failed to parse fan speed: %s", err)
 
         @callback
-        def override_message_received(msg):
+        def mode_message_received(msg):
             payload = msg.payload
-            # track current mode to determine if slider should be editable
             if payload == "unas_managed":
                 self._current_mode = "unas_managed"
             elif payload == "auto":
@@ -112,10 +108,10 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
         )
 
         # subscribe to mode topic to know current mode
-        self._unsubscribe_override = await mqtt.async_subscribe(
+        self._unsubscribe_mode = await mqtt.async_subscribe(
             self.hass,
             "homeassistant/unas/fan_mode",
-            override_message_received,
+            mode_message_received,
             qos=0,
         )
 
@@ -124,8 +120,8 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
     async def async_will_remove_from_hass(self) -> None:
         if self._unsubscribe_speed:
             self._unsubscribe_speed()
-        if self._unsubscribe_override:
-            self._unsubscribe_override()
+        if self._unsubscribe_mode:
+            self._unsubscribe_mode()
         await super().async_will_remove_from_hass()
 
     @property
@@ -176,6 +172,7 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
         except Exception as err:
             _LOGGER.error("Failed to set fan speed: %s", err)
 
+
 class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
     def __init__(
         self,
@@ -192,91 +189,143 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self.hass = hass
         self._key = key
-        self._attr_name = f"UNAS Fan Curve {name}"
+        self._attr_name = name  # use short name without prefix
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_{key}"
         self._attr_native_min_value = min_val
         self._attr_native_max_value = max_val
         self._attr_native_step = 1
-        self._attr_native_value = None  # Unknown until synced
+        self._attr_native_value = None  # unknown until synced
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_mode = NumberMode.BOX
         self._default = default
         self._unsubscribe = None
-
+        self._is_fan_param = key in ["min_fan", "max_fan"]  # track if this is a fan speed param
+        
         self._mqtt_topic = f"homeassistant/unas/fan_curve/{key}"
-
+        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
             "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
             "manufacturer": "Ubiquiti",
             "model": "UNAS Pro",
         }
-
+    
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-
+        
         @callback
         def message_received(msg):
             try:
                 value = float(msg.payload)
+                
+                # if this is a fan param, convert PWM (0-255) to percentage (0-100)
+                if self._is_fan_param:
+                    value = round((value * 100) / 255)
+                
+                # convert to int for integer precision (no decimals)
+                value = int(value)
+                
                 if self._attr_native_min_value <= value <= self._attr_native_max_value:
                     self._attr_native_value = value
                     self.async_write_ha_state()
                     _LOGGER.debug("Fan curve %s updated to %s", self._key, value)
             except (ValueError, TypeError):
                 _LOGGER.warning("Invalid value for %s: %s", self._key, msg.payload)
-
+        
         self._unsubscribe = await mqtt.async_subscribe(
             self.hass,
             self._mqtt_topic,
             message_received,
             qos=0,
         )
-
+        
         # try to read current value from MQTT (retained message)
         # if not available after 1 second, use default
         await self.hass.async_add_executor_job(self._wait_for_mqtt_or_default)
-
+        
         _LOGGER.info("Fan curve %s subscribed to MQTT", self._key)
-
+    
     def _wait_for_mqtt_or_default(self) -> None:
         import time
-
         time.sleep(1)
-
-        # if still None after waiting, set to default and publish
+        
+        # If still None after waiting, set to default and publish
         if self._attr_native_value is None:
-            self._attr_native_value = self._default
+            self._attr_native_value = int(self._default)
             self.hass.add_job(self._publish_to_mqtt, self._default)
-            _LOGGER.info(
-                "Fan curve %s initialized to default: %s", self._key, self._default
-            )
-
+            _LOGGER.info("Fan curve %s initialized to default: %s", self._key, self._default)
+    
     async def async_will_remove_from_hass(self) -> None:
         if self._unsubscribe:
             self._unsubscribe()
         await super().async_will_remove_from_hass()
-
+    
     @property
     def available(self) -> bool:
         return self._attr_native_value is not None
-
+    
     async def async_set_native_value(self, value: float) -> None:
+        # convert to int for integer precision
+        value = int(value)
+        
+        # validate against other curve parameters
+        try:
+            await self._validate_curve_parameters(value)
+        except ValueError as err:
+            _LOGGER.error("Invalid fan curve value: %s", err)
+            raise
+        
         self._attr_native_value = value
         self.async_write_ha_state()
-
+        
         await self._publish_to_mqtt(value)
-
+    
+    async def _validate_curve_parameters(self, new_value: float) -> None:
+        mqtt_data = self.coordinator.mqtt_client.get_data()
+        
+        # extract current curve values (MQTT stores PWM, convert to %)
+        min_temp_pwm = mqtt_data.get("fan_curve_min_temp", 43 if self._key != "min_temp" else new_value)
+        max_temp_pwm = mqtt_data.get("fan_curve_max_temp", 47 if self._key != "max_temp" else new_value)
+        min_fan_pwm = mqtt_data.get("fan_curve_min_fan", 204)
+        max_fan_pwm = mqtt_data.get("fan_curve_max_fan", 255)
+        
+        # convert PWM to percentage for fan params
+        min_temp = min_temp_pwm
+        max_temp = max_temp_pwm
+        min_fan = round((min_fan_pwm * 100) / 255) if isinstance(min_fan_pwm, (int, float)) else 80
+        max_fan = round((max_fan_pwm * 100) / 255) if isinstance(max_fan_pwm, (int, float)) else 100
+        
+        if self._key == "min_temp":
+            min_temp = new_value
+        elif self._key == "max_temp":
+            max_temp = new_value
+        elif self._key == "min_fan":
+            min_fan = new_value
+        elif self._key == "max_fan":
+            max_fan = new_value
+        
+        if max_temp <= min_temp:
+            raise ValueError(f"Max temperature ({max_temp}°C) must be greater than min temperature ({min_temp}°C)")
+        
+        if max_fan < min_fan:
+            raise ValueError(f"Max fan speed ({max_fan}%) must be greater than or equal to min fan speed ({min_fan}%)")
+    
     async def _publish_to_mqtt(self, value: float) -> None:
         try:
+            # if this is a fan param, convert percentage (0-100) to PWM (0-255)
+            mqtt_value = value
+            if self._is_fan_param:
+                mqtt_value = round((value * 255) / 100)
+            
             await mqtt.async_publish(
                 self.hass,
                 self._mqtt_topic,
-                str(int(value)),
+                str(int(mqtt_value)),
                 qos=0,
                 retain=True,
             )
-            _LOGGER.info("Published fan curve %s = %s to MQTT", self._key, value)
+            _LOGGER.info("Published fan curve %s = %s%s to MQTT (MQTT value: %s)", 
+                        self._key, value, self._attr_native_unit_of_measurement, mqtt_value)
         except Exception as err:
             _LOGGER.error("Failed to publish %s to MQTT: %s", self._key, err)
