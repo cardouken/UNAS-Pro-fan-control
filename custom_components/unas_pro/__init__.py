@@ -13,6 +13,9 @@ from .const import (
     CONF_HOST,
     CONF_USERNAME,
     CONF_PASSWORD,
+    CONF_MQTT_HOST,
+    CONF_MQTT_USER,
+    CONF_MQTT_PASSWORD,
     DEFAULT_SCAN_INTERVAL,
 )
 from .ssh_manager import SSHManager
@@ -34,6 +37,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         host=entry.data[CONF_HOST],
         username=entry.data[CONF_USERNAME],
         password=entry.data.get(CONF_PASSWORD),
+        mqtt_host=entry.data.get(CONF_MQTT_HOST),
+        mqtt_user=entry.data.get(CONF_MQTT_USER),
+        mqtt_password=entry.data.get(CONF_MQTT_PASSWORD),
     )
 
     # Test connection and deploy scripts

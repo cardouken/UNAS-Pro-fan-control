@@ -11,7 +11,13 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN, DEFAULT_USERNAME
+from .const import (
+    DOMAIN,
+    DEFAULT_USERNAME,
+    CONF_MQTT_HOST,
+    CONF_MQTT_USER,
+    CONF_MQTT_PASSWORD,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +26,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_HOST): str,
         vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF_MQTT_HOST): str,
+        vol.Required(CONF_MQTT_USER): str,
+        vol.Required(CONF_MQTT_PASSWORD): str,
     }
 )
 

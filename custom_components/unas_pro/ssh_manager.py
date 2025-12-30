@@ -20,12 +20,18 @@ class SSHManager:
         password: Optional[str] = None,
         ssh_key: Optional[str] = None,
         port: int = 22,
+        mqtt_host: Optional[str] = None,
+        mqtt_user: Optional[str] = None,
+        mqtt_password: Optional[str] = None,
     ) -> None:
         self.host = host
         self.username = username
         self.password = password
         self.ssh_key = ssh_key
         self.port = port
+        self.mqtt_host = mqtt_host
+        self.mqtt_user = mqtt_user
+        self.mqtt_password = mqtt_password
         self._conn: Optional[asyncssh.SSHClientConnection] = None
 
     async def connect(self) -> None:
@@ -84,6 +90,28 @@ class SSHManager:
             monitor_service = (SCRIPTS_DIR / "unas_monitor.service").read_text()
             fan_control_script = (SCRIPTS_DIR / "fan_control.sh").read_text()
             fan_control_service = (SCRIPTS_DIR / "fan_control.service").read_text()
+
+            # Replace MQTT placeholders with actual credentials
+            if self.mqtt_host and self.mqtt_user and self.mqtt_password:
+                monitor_script = monitor_script.replace(
+                    'MQTT_HOST="192.168.1.111"', f'MQTT_HOST="{self.mqtt_host}"'
+                )
+                monitor_script = monitor_script.replace(
+                    'MQTT_USER="homeassistant"', f'MQTT_USER="{self.mqtt_user}"'
+                )
+                monitor_script = monitor_script.replace(
+                    'MQTT_PASS="unas_password_123"', f'MQTT_PASS="{self.mqtt_password}"'
+                )
+
+                fan_control_script = fan_control_script.replace(
+                    'MQTT_HOST="192.168.1.111"', f'MQTT_HOST="{self.mqtt_host}"'
+                )
+                fan_control_script = fan_control_script.replace(
+                    'MQTT_USER="homeassistant"', f'MQTT_USER="{self.mqtt_user}"'
+                )
+                fan_control_script = fan_control_script.replace(
+                    'MQTT_PASS="unas_password_123"', f'MQTT_PASS="{self.mqtt_password}"'
+                )
 
             await self._upload_file(
                 "/root/unas_monitor.sh", monitor_script, executable=True

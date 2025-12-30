@@ -5,6 +5,9 @@ CONF_HOST = "host"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_SSH_KEY = "ssh_key"
+CONF_MQTT_HOST = "mqtt_host"
+CONF_MQTT_USER = "mqtt_user"
+CONF_MQTT_PASSWORD = "mqtt_password"
 
 # defaults
 DEFAULT_USERNAME = "root"
