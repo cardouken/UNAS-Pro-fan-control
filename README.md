@@ -51,7 +51,7 @@ Both services survive reboots and can be quickly redeployed after UNAS firmware 
 **UNAS Monitor:**
 - Comprehensive drive monitoring (SMART data, health, temps, capacity, hours, sectors, etc.)
 - Storage pool usage tracking with unit conversion support
-- System metrics (CPU temp, fan speed, uptime, software versions)
+- System metrics (CPU temp, fan speed, CPU usage, memory usage, uptime, software versions, etc.)
 - MQTT integration with Home Assistant auto-discovery
 - Automatic drive detection (no manual configuration)
 - Clean device organization in Home Assistant

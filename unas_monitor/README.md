@@ -8,7 +8,7 @@ system performance, and hardware status.
 - **Drive Monitoring**: Complete SMART data for all drives (temperature, power-on hours, health status, RPM, capacity,
   bad sectors, etc.)
 - **Storage Pool Tracking**: Real-time usage, capacity, and availability metrics
-- **System Metrics**: CPU temperature, fan speed, uptime, software versions
+- **System Metrics**: CPU temperature, fan speed, CPU usage, memory usage, uptime, software versions
 - **Auto-discovery**: All sensors automatically appear in Home Assistant with proper device grouping
 - **Drive Detection**: Automatically detects all SATA/NVMe drives without manual configuration
 - **10-second update interval**: Real-time monitoring with minimal overhead
@@ -20,18 +20,21 @@ Sensors are organized into logical devices:
 - **UNAS Pro Device**: System-level metrics (CPU temp, fan speed, storage pools, uptime, versions)
 - **Individual Drive Devices**: Per-drive SMART data and health metrics (one device per physical drive)
 
-This organization keeps your Home Assistant clean and makes it easy to view related metrics together.
+This organization keeps Home Assistant clean and makes it easy to view related metrics together.
 
 ## What Gets Published
 
 ### UNAS Pro Device
 
 - CPU temperature
+- CPU usage
+- Memory usage
 - Fan speed (raw PWM and percentage)
 - Storage pool metrics (usage %, size, used, available)
 - System uptime
 - UniFi OS version
 - UniFi Drive version
+- etc
 
 ### Per-Drive Devices (auto-detected)
 
@@ -57,8 +60,6 @@ MQTT_HOST="192.168.1.111"              # Your HA IP
 MQTT_USER="homeassistant"              # MQTT username
 MQTT_PASS="your_password"              # MQTT password
 ```
-
-Drives are automatically detected, no manual configuration needed.
 
 ## Deployment
 
@@ -110,11 +111,13 @@ template:
         device_class: temperature
         state: >
           {% set temps = states.sensor 
-            | selectattr('entity_id', 'match', 'sensor.unas_sd._temperature')
+            | selectattr('entity_id', 'match', 'sensor.unas_hdd_[0-9]+_temperature')
             | selectattr('state', 'is_number')
             | map(attribute='state') | map('float') | list %}
           {{ (temps | sum / temps | length) | round(1) if temps | length > 0 else 'unavailable' }}
 ```
+
+This template automatically discovers all HDD temperature sensors regardless of how many drives you have installed.
 
 ## Logs
 
