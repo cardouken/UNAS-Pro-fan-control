@@ -65,7 +65,7 @@ read_storage_usage() {
     declare -A seen_devices
 
     while read -r source size used avail pcent; do
-        # Skip tmpfs, devtmpfs, loop devices, and other virtual filesystems
+        # skip tmpfs, devtmpfs, loop devices, and other virtual filesystems
         [[ "$source" =~ ^(tmpfs|devtmpfs|overlay|shm|udev) ]] && continue
         [[ "$source" =~ /loop ]] && continue
         [[ ! "$source" =~ ^/dev/ ]] && continue
@@ -81,7 +81,7 @@ read_storage_usage() {
             used_gb=${used%G}
             avail_gb=${avail%G}
 
-            # Publish storage sensors
+            # publish storage sensors
             publish_mqtt_sensor "unas_${fs_name}_usage" "UNAS Storage Pool ${pool_num} Usage" "$capacity_num" "%"
             publish_mqtt_sensor "unas_${fs_name}_size" "UNAS Storage Pool ${pool_num} Size" "$size_gb" "GB" "data_size"
             publish_mqtt_sensor "unas_${fs_name}_used" "UNAS Storage Pool ${pool_num} Used" "$used_gb" "GB" "data_size"

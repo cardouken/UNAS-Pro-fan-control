@@ -22,7 +22,7 @@ MAX_FAN=255               # Maximum PWM (255 = 100%)
 #   MIN_TEMP=40, MAX_TEMP=50, MIN_FAN=153 (60%), MAX_FAN=255 (100%)
 #   40°C: 60%, 45°C: 80%, 50°C: 100%
 #
-# Balanced (recommended for Noctua fans):
+# Balanced (recommended for Noctua NF-A8 PWM fans):
 #   MIN_TEMP=43, MAX_TEMP=47, MIN_FAN=204 (80%), MAX_FAN=255 (100%)
 #   43°C: 80%, 45°C: 90%, 47°C: 100%
 #

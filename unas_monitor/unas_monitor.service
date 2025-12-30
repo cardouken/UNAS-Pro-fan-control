@@ -1,0 +1,12 @@
+[Unit]
+Description=UNAS Monitor - MQTT Publisher for Home Assistant
+After=network.target
+
+[Service]
+ExecStart=/root/unas_monitor.sh
+Restart=always
+User=root
+WorkingDirectory=/root
+
+[Install]
+WantedBy=multi-user.target
