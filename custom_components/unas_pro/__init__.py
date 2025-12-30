@@ -90,8 +90,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         data = hass.data[DOMAIN].pop(entry.entry_id)
+        
+        # clean up MQTT subscription
         await data["mqtt_client"].async_unsubscribe()
-        await data["ssh_manager"].disconnect()
+        
+        # stop and remove services from UNAS to restore stock behavior
+        ssh_manager = data["ssh_manager"]
+        try:
+            _LOGGER.info("Cleaning up UNAS services and scripts...")
+            
+            # Stop services
+            await ssh_manager.execute_command("systemctl stop unas_monitor || true")
+            await ssh_manager.execute_command("systemctl stop fan_control || true")
+            
+            # Disable services
+            await ssh_manager.execute_command("systemctl disable unas_monitor || true")
+            await ssh_manager.execute_command("systemctl disable fan_control || true")
+            
+            # Remove service files
+            await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
+            await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
+            
+            # Remove scripts
+            await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
+            await ssh_manager.execute_command("rm -f /root/fan_control.sh")
+            
+            # Remove state files
+            await ssh_manager.execute_command("rm -f /tmp/fan_mode")
+            
+            # Reload systemd
+            await ssh_manager.execute_command("systemctl daemon-reload")
+            
+            # Re-enable UNAS firmware fan control by setting pwm_enable back to auto (2)
+            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
+            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
+            
+            _LOGGER.info("Successfully cleaned up UNAS - restored to stock fan control")
+        except Exception as err:
+            _LOGGER.error("Failed to clean up UNAS (non-critical): %s", err)
+        
+        # Disconnect SSH
+        await ssh_manager.disconnect()
 
     return unload_ok
 
