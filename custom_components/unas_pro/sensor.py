@@ -228,7 +228,7 @@ async def _discover_and_add_drive_sensors(
     for bay_num in sorted(new_bays):
         for sensor_suffix, name, unit, device_class, state_class, icon in DRIVE_SENSORS:
             mqtt_key = f"unas_hdd_{bay_num}_{sensor_suffix}"
-            full_name = f"HDD {bay_num} {name}"
+            full_name = f"UNAS HDD {bay_num} {name}"
             entities.append(
                 UNASDriveSensor(
                     coordinator,
