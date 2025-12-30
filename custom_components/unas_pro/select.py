@@ -57,14 +57,14 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        
+
         # Read current mode from UNAS and sync to MQTT
         try:
             stdout, _ = await self.coordinator.ssh_manager.execute_command(
                 "cat /tmp/fan_mode 2>/dev/null || echo 'unas_managed'"
             )
             current_mode = stdout.strip()
-            
+
             # Publish to MQTT as retained
             await mqtt.async_publish(
                 self.hass,
@@ -73,7 +73,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
                 qos=0,
                 retain=True,
             )
-            
+
             # Set initial state
             if current_mode == MQTT_MODE_UNAS_MANAGED:
                 self._current_option = MODE_UNAS_MANAGED
@@ -83,8 +83,10 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
                 self._current_option = MODE_SET_SPEED
             else:
                 self._current_option = MODE_UNAS_MANAGED
-            
-            _LOGGER.info("Synced fan mode from UNAS: %s (%s)", current_mode, self._current_option)
+
+            _LOGGER.info(
+                "Synced fan mode from UNAS: %s (%s)", current_mode, self._current_option
+            )
         except Exception as err:
             _LOGGER.error("Failed to sync mode from UNAS: %s", err)
             self._current_option = MODE_UNAS_MANAGED  # Default

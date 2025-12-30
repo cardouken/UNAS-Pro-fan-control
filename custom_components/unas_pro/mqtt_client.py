@@ -18,7 +18,7 @@ class UNASMQTTClient:
 
     async def async_subscribe(self) -> None:
         # check if MQTT integration is loaded
-        if not mqtt.DOMAIN in self.hass.data:
+        if mqtt.DOMAIN not in self.hass.data:
             _LOGGER.error("MQTT integration not loaded! Cannot subscribe to topics.")
             return
 

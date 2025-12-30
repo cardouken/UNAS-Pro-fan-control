@@ -180,7 +180,9 @@ async def async_setup_entry(
 
     # store add_entities callback for dynamic drive sensor creation
     coordinator.sensor_add_entities = async_add_entities
-    coordinator._discovered_bays = set()  # Track which bays we've already created sensors for
+    coordinator._discovered_bays = (
+        set()
+    )  # Track which bays we've already created sensors for
 
     # schedule initial drive sensor discovery after a delay to let MQTT data arrive
     async def discover_drives():
@@ -209,13 +211,17 @@ async def _discover_and_add_drive_sensors(
 
     # only process bays we haven't seen before
     new_bays = detected_bays - coordinator._discovered_bays
-    
+
     if not new_bays:
         if not detected_bays:
             _LOGGER.debug("No drives detected in MQTT data yet")
         return
 
-    _LOGGER.info("Discovered new drive bays: %s (total: %s)", sorted(new_bays), sorted(detected_bays))
+    _LOGGER.info(
+        "Discovered new drive bays: %s (total: %s)",
+        sorted(new_bays),
+        sorted(detected_bays),
+    )
 
     # create sensors for each newly detected bay
     entities = []
@@ -277,11 +283,6 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         self._attr_native_value = mqtt_data.get(self._mqtt_key)
         self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        mqtt_data = self.coordinator.data.get("mqtt_data", {})
-        return self._mqtt_key in mqtt_data
 
     @property
     def available(self) -> bool:
@@ -419,7 +420,7 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         self._attr_native_value = mqtt_data.get(self._mqtt_key)
         self.async_write_ha_state()
-    
+
     @property
     def available(self) -> bool:
         """Return if entity is available."""

@@ -125,10 +125,13 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
 
             # get MQTT data
             mqtt_data = self.mqtt_client.get_data()
-            
+
             # check for new drives when sensor platform is ready
-            if hasattr(self, 'sensor_add_entities') and hasattr(self, '_discovered_bays'):
+            if hasattr(self, "sensor_add_entities") and hasattr(
+                self, "_discovered_bays"
+            ):
                 from .sensor import _discover_and_add_drive_sensors
+
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
 
             return {
