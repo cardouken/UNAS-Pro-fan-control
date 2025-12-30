@@ -20,22 +20,36 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 
 # Configuration
-hdd_devices=(sda sdb sdc sdd sde sdf)
 MONITOR_INTERVAL=10
 
 MQTT_HOST="192.168.1.111"
 MQTT_USER="homeassistant"
 MQTT_PASS="unas_password_123"
 
-# Helper function to publish MQTT sensor
+# Device identifiers for grouping
+UNAS_DEVICE='{"identifiers":["unas_pro"],"name":"UNAS Pro","manufacturer":"Ubiquiti","model":"UNAS Pro"}'
+
+# Auto-detect all SATA/NVMe drives (excludes loop, ram, etc.)
+detect_drives() {
+    local drives=()
+    for dev in /dev/sd? /dev/nvme?n?; do
+        if [ -b "$dev" ]; then
+            drives+=("$(basename "$dev")")
+        fi
+    done
+    echo "${drives[@]}"
+}
+
+# Helper function to publish MQTT sensor with device grouping
 publish_mqtt_sensor() {
     local sensor_name=$1
     local friendly_name=$2
     local value=$3
     local unit=$4
     local device_class=${5:-}
+    local device_json=${6:-$UNAS_DEVICE}
     
-    local config_json="{\"name\":\"$friendly_name\",\"state_topic\":\"homeassistant/sensor/${sensor_name}/state\",\"unit_of_measurement\":\"$unit\",\"unique_id\":\"$sensor_name\""
+    local config_json="{\"name\":\"$friendly_name\",\"state_topic\":\"homeassistant/sensor/${sensor_name}/state\",\"unit_of_measurement\":\"$unit\",\"unique_id\":\"$sensor_name\",\"device\":$device_json"
     
     if [ -n "$device_class" ]; then
         config_json="${config_json},\"device_class\":\"$device_class\""
@@ -55,70 +69,100 @@ publish_mqtt_sensor() {
         -m "$value"
 }
 
-# Function to read storage pool usage
-read_storage_usage() {
-    local pool_num=1
-    local temp_file="/tmp/df_output.$$"
+# Function to read comprehensive drive data (SMART attributes + disk usage)
+read_drive_data() {
+    local dev smart_output temp model serial rpm status health power_hours bad_sectors firmware
+    local total_size_bytes total_size_tb used_size_tb manufacturer
+    local hdd_devices
 
-    df -BG --output=source,size,used,avail,pcent 2>/dev/null | tail -n +2 > "$temp_file"
-
-    declare -A seen_devices
-
-    while read -r source size used avail pcent; do
-        # skip tmpfs, devtmpfs, loop devices, and other virtual filesystems
-        [[ "$source" =~ ^(tmpfs|devtmpfs|overlay|shm|udev) ]] && continue
-        [[ "$source" =~ /loop ]] && continue
-        [[ ! "$source" =~ ^/dev/ ]] && continue
-
-        size_gb=${size%G}
-
-        if [[ "$size_gb" -gt 100 ]]; then
-            [[ -n "${seen_devices[$source]:-}" ]] && continue
-            seen_devices[$source]=1
-
-            fs_name="pool${pool_num}"
-            capacity_num=${pcent%\%}
-            used_gb=${used%G}
-            avail_gb=${avail%G}
-
-            # publish storage sensors
-            publish_mqtt_sensor "unas_${fs_name}_usage" "UNAS Storage Pool ${pool_num} Usage" "$capacity_num" "%"
-            publish_mqtt_sensor "unas_${fs_name}_size" "UNAS Storage Pool ${pool_num} Size" "$size_gb" "GB" "data_size"
-            publish_mqtt_sensor "unas_${fs_name}_used" "UNAS Storage Pool ${pool_num} Used" "$used_gb" "GB" "data_size"
-            publish_mqtt_sensor "unas_${fs_name}_available" "UNAS Storage Pool ${pool_num} Available" "$avail_gb" "GB" "data_size"
-
-            pool_num=$((pool_num + 1))
-        fi
-    done < "$temp_file"
-
-    rm -f "$temp_file"
-}
-
-# Function to read all HDD temperatures at once
-read_all_hdd_temperatures() {
-    local dev temp
-
-    declare -gA current_temps=()
+    # get list of drives
+    read -ra hdd_devices <<< "$(detect_drives)"
 
     for dev in "${hdd_devices[@]}"; do
-        if [ -e "/dev/$dev" ]; then
-            temp=$(timeout 5 smartctl -a "/dev/$dev" 2>/dev/null | awk '/194 Temperature_Celsius/ {print $10}' || echo "0")
-            if [[ "$temp" =~ ^[0-9]+$ ]]; then
-                current_temps["$dev"]="$temp"
-            fi
+        if [ ! -e "/dev/$dev" ]; then
+            continue
         fi
+
+        # Get SMART data in one call
+        smart_output=$(timeout 10 smartctl -a "/dev/$dev" 2>/dev/null || echo "")
+        
+        if [ -z "$smart_output" ]; then
+            continue
+        fi
+
+        # Parse SMART attributes
+        temp=$(echo "$smart_output" | awk '/194 Temperature_Celsius/ {print $10}' || echo "unknown")
+        model=$(echo "$smart_output" | awk -F': ' '/Device Model:/ {print $2; exit} /Product:/ {print $2; exit}' | xargs || echo "unknown")
+        serial=$(echo "$smart_output" | awk -F': ' '/Serial Number:/ {print $2}' | xargs || echo "unknown")
+        firmware=$(echo "$smart_output" | awk -F': ' '/Firmware Version:/ {print $2}' | xargs || echo "unknown")
+        power_hours=$(echo "$smart_output" | awk '/Power_On_Hours/ {print $10; exit} /power on hours/ {print $4; exit}' || echo "0")
+        bad_sectors=$(echo "$smart_output" | awk '/Reallocated_Sector_Ct/ {print $10; exit} /reallocated sectors/ {print $4; exit}' || echo "0")
+        
+        # Parse RPM - try multiple patterns
+        rpm=$(echo "$smart_output" | awk -F': ' '/Rotation Rate:/ {print $2}' | xargs)
+        if [ -z "$rpm" ] || [ "$rpm" = "Solid State Device" ]; then
+            rpm="SSD"
+        elif [[ ! "$rpm" =~ ^[0-9]+$ ]]; then
+            # Extract just the number if it has text like "7200 rpm"
+            rpm=$(echo "$rpm" | grep -oE '[0-9]+' | head -1)
+            [ -z "$rpm" ] && rpm="unknown"
+        fi
+        
+        # Extract manufacturer from model (usually first word)
+        manufacturer=$(echo "$model" | awk '{print $1}')
+        
+        # SMART health status
+        health=$(echo "$smart_output" | grep -i "SMART overall-health" | awk '{print $NF}' || echo "unknown")
+        if [ "$health" = "PASSED" ]; then
+            status="Optimal"
+        else
+            status="Warning"
+        fi
+
+        # Get disk size from blockdev
+        total_size_bytes=$(blockdev --getsize64 "/dev/$dev" 2>/dev/null || echo "0")
+        total_size_tb=$(awk "BEGIN {printf \"%.2f\", $total_size_bytes / 1024 / 1024 / 1024 / 1024}")
+        
+        # Try to get used size from storage pool (this is approximate)
+        used_size_tb="$total_size_tb"  # Placeholder
+        
+        # Allocation info
+        allocation="Storage Pool 1"
+
+        # Build device definition with actual manufacturer and model
+        local drive_device="{\"identifiers\":[\"unas_drive_${dev}\"],\"name\":\"UNAS Drive ${dev^^}\",\"manufacturer\":\"$manufacturer\",\"model\":\"$model\",\"serial_number\":\"$serial\",\"hw_version\":\"$firmware\",\"via_device\":\"unas_pro\"}"
+
+        # Publish all drive attributes grouped under this drive's device
+        publish_mqtt_sensor "unas_${dev}_temperature" "${dev^^} Temperature" "$temp" "°C" "temperature" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_model" "${dev^^} Model" "$model" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_serial" "${dev^^} Serial Number" "$serial" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_rpm" "${dev^^} RPM" "$rpm" "rpm" "" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_firmware" "${dev^^} Firmware" "$firmware" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_status" "${dev^^} Status" "$status" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_allocation" "${dev^^} Allocation" "$allocation" "" "" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_total_size" "${dev^^} Total Size" "$total_size_tb" "TB" "data_size" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_used_size" "${dev^^} Used Size" "$used_size_tb" "TB" "data_size" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_power_hours" "${dev^^} Power-On Hours" "$power_hours" "h" "duration" "$drive_device"
+        publish_mqtt_sensor "unas_${dev}_bad_sectors" "${dev^^} Bad Sectors" "$bad_sectors" "" "" "$drive_device"
     done
 }
 
-# Function to format temperature output
+# Function to format temperature output for console logging
 format_temperature_output() {
     local temps_output=()
-    local dev temp
+    local dev temp smart_output
+    local hdd_devices
+
+    # Get list of drives dynamically
+    read -ra hdd_devices <<< "$(detect_drives)"
 
     for dev in "${hdd_devices[@]}"; do
-        if [[ -n "${current_temps[$dev]:-}" ]]; then
-            temp="${current_temps[$dev]}"
-            temps_output+=("${temp}°C")
+        if [ -e "/dev/$dev" ]; then
+            smart_output=$(timeout 5 smartctl -a "/dev/$dev" 2>/dev/null || echo "")
+            temp=$(echo "$smart_output" | awk '/194 Temperature_Celsius/ {print $10}' || echo "0")
+            if [[ "$temp" =~ ^[0-9]+$ ]] && [ "$temp" != "0" ]; then
+                temps_output+=("${temp}°C")
+            fi
         fi
     done
 
@@ -134,8 +178,47 @@ format_temperature_output() {
     echo "$output"
 }
 
+# Function to read storage pool usage
+read_storage_usage() {
+    local pool_num=1
+    local temp_file="/tmp/df_output.$$"
+
+    df -BG --output=source,size,used,avail,pcent 2>/dev/null | tail -n +2 > "$temp_file"
+
+    declare -A seen_devices
+
+    while read -r source size used avail pcent; do
+        # Skip tmpfs, devtmpfs, loop devices, and other virtual filesystems
+        [[ "$source" =~ ^(tmpfs|devtmpfs|overlay|shm|udev) ]] && continue
+        [[ "$source" =~ /loop ]] && continue
+        [[ ! "$source" =~ ^/dev/ ]] && continue
+
+        size_gb=${size%G}
+
+        if [[ "$size_gb" -gt 100 ]]; then
+            [[ -n "${seen_devices[$source]:-}" ]] && continue
+            seen_devices[$source]=1
+
+            fs_name="pool${pool_num}"
+            capacity_num=${pcent%\%}
+            used_gb=${used%G}
+            avail_gb=${avail%G}
+
+            # Publish storage sensors under main UNAS device
+            publish_mqtt_sensor "unas_${fs_name}_usage" "Storage Pool ${pool_num} Usage" "$capacity_num" "%" "" "$UNAS_DEVICE"
+            publish_mqtt_sensor "unas_${fs_name}_size" "Storage Pool ${pool_num} Size" "$size_gb" "GB" "data_size" "$UNAS_DEVICE"
+            publish_mqtt_sensor "unas_${fs_name}_used" "Storage Pool ${pool_num} Used" "$used_gb" "GB" "data_size" "$UNAS_DEVICE"
+            publish_mqtt_sensor "unas_${fs_name}_available" "Storage Pool ${pool_num} Available" "$avail_gb" "GB" "data_size" "$UNAS_DEVICE"
+
+            pool_num=$((pool_num + 1))
+        fi
+    done < "$temp_file"
+
+    rm -f "$temp_file"
+}
+
 # Main monitoring loop
-monitor_temperatures() {
+monitor_system() {
     local next_ts raw percent timestamp temp_str cpu_temp
 
     next_ts=$(date +%s)
@@ -147,23 +230,22 @@ monitor_temperatures() {
         cpu_temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
         cpu_temp=$((cpu_temp / 1000))
 
-        read_all_hdd_temperatures
-        temp_str=$(format_temperature_output)
+        # Read all drive data (SMART attributes)
+        read_drive_data
 
+        # Read storage pool usage
         read_storage_usage
+
+        # Get temperature string for console output
+        temp_str=$(format_temperature_output)
 
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
         printf "%s: %3d (%d%%) (CPU %d°C) (HDD %s)\n" "$timestamp" "$raw" "$percent" "$cpu_temp" "$temp_str"
 
-        # Publish drive temperatures
-        for dev in "${hdd_devices[@]}"; do
-            if [[ -n "${current_temps[$dev]:-}" ]]; then
-                publish_mqtt_sensor "unas_${dev}" "UNAS ${dev} Temperature" "${current_temps[$dev]}" "°C" "temperature"
-            fi
-        done
-
-        # Publish CPU temperature
-        publish_mqtt_sensor "unas_cpu" "UNAS CPU Temperature" "$cpu_temp" "°C" "temperature"
+        # Publish CPU temperature and fan speed under main UNAS device
+        publish_mqtt_sensor "unas_cpu" "CPU Temperature" "$cpu_temp" "°C" "temperature" "$UNAS_DEVICE"
+        publish_mqtt_sensor "unas_fan_speed" "Fan Speed" "$raw" "PWM" "" "$UNAS_DEVICE"
+        publish_mqtt_sensor "unas_fan_speed_percent" "Fan Speed Percentage" "$percent" "%" "" "$UNAS_DEVICE"
 
         next_ts=$((next_ts + MONITOR_INTERVAL))
         local sleep_time=$((next_ts - $(date +%s)))
@@ -177,4 +259,4 @@ monitor_temperatures() {
 }
 
 # Start monitoring
-monitor_temperatures
+monitor_system

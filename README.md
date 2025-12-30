@@ -88,7 +88,6 @@ If you only want system metrics in Home Assistant:
    MQTT_HOST="192.168.1.111"
    MQTT_USER="homeassistant"
    MQTT_PASS="your_password"
-   hdd_devices=(sda sdb sdc sdd sde sdf)  # Match your drives
    ```
 3. Deploy:
    ```bash

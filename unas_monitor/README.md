@@ -34,7 +34,6 @@ in the HA UI.
 Edit `unas_monitor.sh` to configure:
 
 ```bash
-hdd_devices=(sda sdb sdc sdd sde sdf)  # Your drive list
 MONITOR_INTERVAL=10                    # Update interval in seconds
 
 MQTT_HOST="192.168.1.111"              # Your HA IP
