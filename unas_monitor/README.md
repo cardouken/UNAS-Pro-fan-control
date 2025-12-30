@@ -1,33 +1,50 @@
 # UNAS Monitor Service
 
-Monitors and publishes UNAS Pro system metrics to Home Assistant via MQTT. Includes temperature monitoring, storage
-usage, and more.
+Monitors and publishes UNAS Pro system metrics to Home Assistant via MQTT. Provides visibility into storage health,
+system performance, and hardware status.
 
 ## Features
 
-- **Temperature Monitoring**: Individual drive temps, CPU temp, current fan speed
-- **Storage Monitoring**: Pool usage, size, used space, and available space
-- **Future Expansion Ready**: Designed to easily add drive health (SMART), operating hours, and other metrics
-- **Auto-discovery**: All sensors automatically appear in Home Assistant
-- **10-second update interval**: Real-time monitoring
+- **Drive Monitoring**: Complete SMART data for all drives (temperature, power-on hours, health status, RPM, capacity,
+  bad sectors, etc.)
+- **Storage Pool Tracking**: Real-time usage, capacity, and availability metrics
+- **System Metrics**: CPU temperature, fan speed, uptime, software versions
+- **Auto-discovery**: All sensors automatically appear in Home Assistant with proper device grouping
+- **Drive Detection**: Automatically detects all SATA/NVMe drives without manual configuration
+- **10-second update interval**: Real-time monitoring with minimal overhead
+
+## Device Organization in Home Assistant
+
+Sensors are organized into logical devices:
+
+- **UNAS Pro Device**: System-level metrics (CPU temp, fan speed, storage pools, uptime, versions)
+- **Individual Drive Devices**: Per-drive SMART data and health metrics (one device per physical drive)
+
+This organization keeps your Home Assistant clean and makes it easy to view related metrics together.
 
 ## What Gets Published
 
-### Temperature Sensors
+### UNAS Pro Device
 
-- Individual HDD temperatures (via SMART)
 - CPU temperature
-- Current fan speed (PWM and percentage)
+- Fan speed (raw PWM and percentage)
+- Storage pool metrics (usage %, size, used, available)
+- System uptime
+- UniFi OS version
+- UniFi Drive version
 
-### Storage Sensors
+### Per-Drive Devices (auto-detected)
 
-- Pool usage percentage
-- Total pool size (GB, convertible to TB)
-- Used space (GB)
-- Available space (GB)
+- Temperature
+- SMART health status
+- Power-on hours
+- Bad sector count
+- Drive model, serial number, firmware
+- RPM (or "SSD" for solid state drives)
+- Total capacity
+- etc
 
-All storage sensors use Home Assistant's `data_size` device class, allowing you to choose display units (GB, TB, etc.)
-in the HA UI.
+All storage sensors support Home Assistant's unit conversion (display in GB, TB, etc.).
 
 ## Configuration
 
@@ -41,6 +58,8 @@ MQTT_USER="homeassistant"              # MQTT username
 MQTT_PASS="your_password"              # MQTT password
 ```
 
+Drives are automatically detected, no manual configuration needed.
+
 ## Deployment
 
 ```bash
@@ -51,7 +70,7 @@ This will:
 
 1. Copy `unas_monitor.sh` to `/root/`
 2. Copy `unas_monitor.service` to `/etc/systemd/system/`
-3. Install dependencies (mosquitto-clients, nano)
+3. Install dependencies (mosquitto-clients)
 4. Enable and start the service
 
 ## Manual Testing
@@ -66,56 +85,36 @@ ssh root@YOUR_UNAS_IP
 Example output:
 
 ```
-2025-12-30 06:36:20: 186 (72%) (CPU 63°C) (HDD 44°C, 46°C, 46°C, 47°C, 45°C, 47°C)
+2025-12-30 08:15:30: 186 (72%) (CPU 63°C) (HDD 44°C, 46°C, 46°C, 47°C, 45°C, 47°C)
 ```
-
-## MQTT Topics
-
-### Published Topics
-
-**Temperatures:**
-
-- `homeassistant/sensor/unas_sda/state` through `unas_sdf/state` - Drive temps
-- `homeassistant/sensor/unas_cpu/state` - CPU temp
-
-**Storage:**
-
-- `homeassistant/sensor/unas_pool1_usage/state` - Usage percentage
-- `homeassistant/sensor/unas_pool1_size/state` - Total size
-- `homeassistant/sensor/unas_pool1_used/state` - Used space
-- `homeassistant/sensor/unas_pool1_available/state` - Available space
-
-All topics include auto-discovery configs published to `/config` topics.
 
 ## Home Assistant Setup
 
-### Template Sensors
+### MQTT Integration
 
-Add to `configuration.yaml` for aggregate temperature sensor:
+The service uses MQTT auto-discovery. Once deployed:
+
+1. Go to Settings → Devices & Services → MQTT
+2. Click "Reload" to discover all sensors
+3. Find "UNAS Pro" device and individual drive devices
+
+### Template Sensors (Optional)
+
+Add to `configuration.yaml` for aggregate metrics:
 
 ```yaml
 template:
   - sensor:
-      - name: "UNAS Average Temperature"
+      - name: "UNAS Average Drive Temperature"
         unit_of_measurement: "°C"
         device_class: temperature
         state: >
-          {% set drives = [
-            states('sensor.unas_sda_temperature'),
-            states('sensor.unas_sdb_temperature'),
-            states('sensor.unas_sdc_temperature'),
-            states('sensor.unas_sdd_temperature'),
-            states('sensor.unas_sde_temperature'),
-            states('sensor.unas_sdf_temperature')
-          ] %}
-          {% set valid = drives | reject('in', ['unknown', 'unavailable']) | map('float') | list %}
-          {{ (valid | sum / valid | length) | round(1) if valid | length > 0 else 'unavailable' }}
+          {% set temps = states.sensor 
+            | selectattr('entity_id', 'match', 'sensor.unas_sd._temperature')
+            | selectattr('state', 'is_number')
+            | map(attribute='state') | map('float') | list %}
+          {{ (temps | sum / temps | length) | round(1) if temps | length > 0 else 'unavailable' }}
 ```
-
-### Critical Temperature Automation
-
-See main README and fan_control README for failsafe automation that monitors temps and forces fan control to auto mode
-if thresholds are exceeded.
 
 ## Logs
 
@@ -130,42 +129,44 @@ ssh root@YOUR_UNAS_IP "journalctl -u unas_monitor -f"
 **Sensors not appearing in HA:**
 
 - Check MQTT credentials in `unas_monitor.sh`
-- Verify MQTT broker is running in HA
+- Verify MQTT broker is running in HA (Settings → Integrations → MQTT)
+- Reload MQTT integration: Settings → Devices & Services → MQTT → three dots → Reload
 - Check logs: `journalctl -u unas_monitor -n 50`
 
-**Missing drive temperatures:**
+**Drive entities not grouped under drive devices:**
 
-- Verify drive device names: `ls /dev/sd*`
-- Update `hdd_devices` array if needed
-- Test SMART: `smartctl -a /dev/sda`
+- Restart Home Assistant completely
+- Reload MQTT integration after restart
+
+**Missing/incorrect drive data:**
+
+- Verify drives are detected: `ls /dev/sd*`
+- Test SMART manually: `smartctl -a /dev/sda`
+- Check service logs for errors
 
 **Storage sensors showing wrong values:**
 
 - Only volumes >100GB are published (filters out system partitions)
-- Multiple bind mounts of same device are deduplicated
-- Check what `df -BG` shows on the UNAS
+- Bind mounts are automatically deduplicated
 
 **MQTT connection fails:**
 
-- Verify broker is accessible: `mosquitto_sub -h YOUR_HA_IP -u user -P pass -t test -v`
+- Test broker: `mosquitto_sub -h YOUR_HA_IP -u user -P pass -t test -v`
 - Check firewall allows port 1883
 - Ensure credentials are correct
 
-## Adding New Metrics
+## Extending with New Metrics
 
-Use the `publish_mqtt_sensor()` helper function:
+The `publish_mqtt_sensor()` helper function makes adding new metrics straightforward:
 
 ```bash
-# Example: Publish drive health
-smart_health=$(smartctl -H /dev/sda | grep "SMART overall-health" | awk '{print $NF}')
-publish_mqtt_sensor "unas_sda_health" "UNAS sda Health" "$smart_health" "" ""
-
-# Example: Publish drive hours
-drive_hours=$(smartctl -a /dev/sda | grep "Power_On_Hours" | awk '{print $10}')
-publish_mqtt_sensor "unas_sda_hours" "UNAS sda Operating Hours" "$drive_hours" "h" ""
+# Example: Add memory usage
+mem_used=$(free -m | awk '/^Mem:/ {print $3}')
+publish_mqtt_sensor "unas_memory_used" "Memory Used" "$mem_used" "MB" "" "$UNAS_DEVICE"
 ```
 
-Just add calls to `publish_mqtt_sensor()` in the main monitoring loop.
+Just add calls to `publish_mqtt_sensor()` in the main monitoring loop or create a new function following the existing
+pattern.
 
 ## Post-Update Redeployment
 

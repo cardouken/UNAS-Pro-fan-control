@@ -1,63 +1,60 @@
-# UNAS Pro Monitoring & Fan Control
+# UNAS Pro Monitoring & Control
 
-Fork of the original UNAS Pro fan control project, extended with Home Assistant integration via MQTT and system monitoring.
+Comprehensive monitoring and fan control for the Ubiquiti UNAS Pro, with full Home Assistant integration via MQTT.
 
 ## Overview
 
-This project provides two **independent** systemd services for the UniFi UNAS Pro:
+This project provides two **independent** systemd services for the UNAS Pro:
 
-1. **UNAS Monitor** (`/unas_monitor`) - Publishes system metrics to Home Assistant via MQTT
+1. **UNAS Monitor** (`/unas_monitor`) - Publishes comprehensive system metrics to Home Assistant via MQTT
 2. **Fan Control** (`/fan_control`) - Temperature-based fan speed control with Home Assistant override capability
 
-**Important:** These services are completely independent. You can use either one without the other:
+**Important:** These services are completely independent. Use one, both, or neither:
 
-- **Just want monitoring in HA?** → Deploy only `unas_monitor`
-- **Want custom fan control without HA?** → Deploy only `fan_control` (remove MQTT code)
-- **Want both monitoring AND control in HA?** → Deploy both services
+- **Just monitoring?** → Deploy only `unas_monitor`
+- **Just custom fan control?** → Deploy only `fan_control`
+- **Full integration?** → Deploy both services
 
 Both services survive reboots and can be quickly redeployed after UNAS firmware updates.
 
-### HA Dashboard Example
-![HA Dashboard Example](HA_dashboard.png)
-
 ## Which Services Do I Need?
 
-### Option 1: System Monitoring Only
-**You want:** Drive temps, CPU temp, storage usage, and fan speeds visible in Home Assistant via MQTT
+### Scenario 1: System Monitoring Only
+**You want:** Drive health, temperatures, storage usage, and system metrics visible in Home Assistant  
 **Deploy:** `unas_monitor` service only  
 **You get:**
-- All drive temperatures as HA sensors
-- CPU temperature as HA sensor
-- Current fan speed (PWM and %) as HA sensors
-- Storage pool usage, size, used, and available space
+- Complete SMART data for all drives (temperature, power-on hours, health status, capacity, etc.)
+- Storage pool usage and capacity tracking
+- CPU temperature and fan speed visibility
+- System uptime and software versions
 - No changes to fan behavior (UNAS controls fans normally)
 
-### Option 2: Custom Fan Control Only
+### Scenario 2: Custom Fan Control Only
 **You want:** Better fan curve than stock UNAS firmware  
 **Deploy:** `fan_control` service only (optionally remove MQTT code)  
 **You get:**
-- Custom linear fan curve based on drive temps only
+- Custom linear fan curve based on drive temps
+- Optimized for quiet operation with Noctua fans
 - No Home Assistant integration needed
 
-### Option 3: Full Integration
-**You want:** Everything - monitoring AND control from HA  
+### Scenario 3: Full Integration
+**You want:** Complete visibility and control from Home Assistant  
 **Deploy:** Both `unas_monitor` and `fan_control` services  
 **You get:**
-- All temperature and storage sensors in HA
-- Custom fan curves with HA override capability
-- Manual fan speed control from HA dashboard
+- All monitoring metrics in Home Assistant
+- Custom fan curves with manual override from HA
 - Critical temperature failsafe automation
-- Full visibility and control
+- Full system visibility and control
 
 ## Features
 
 **UNAS Monitor:**
-- Real-time temperature monitoring (drives and CPU)
-- Storage pool usage tracking
-- Current fan speed reporting
+- Comprehensive drive monitoring (SMART data, health, temps, capacity, hours, sectors, etc.)
+- Storage pool usage tracking with unit conversion support
+- System metrics (CPU temp, fan speed, uptime, software versions)
 - MQTT integration with Home Assistant auto-discovery
-- 10-second update interval
-- Extensible for additional metrics (SMART health, drive hours, etc.)
+- Automatic drive detection (no manual configuration)
+- Clean device organization in Home Assistant
 
 **Fan Control:**
 - Configurable linear fan curve
@@ -75,7 +72,7 @@ Both services survive reboots and can be quickly redeployed after UNAS firmware 
 ### Prerequisites
 
 - UNAS Pro with SSH access
-- (Optional) Home Assistant instance with MQTT broker add-on (Mosquitto) and MQTT integration set up
+- (Optional) Home Assistant instance with MQTT broker (Mosquitto)
 - (Optional) MQTT user credentials
 
 ### Deployment - Monitoring Only
@@ -94,7 +91,7 @@ If you only want system metrics in Home Assistant:
    cd unas_monitor
    ./deploy_unas_monitor.sh root@YOUR_UNAS_IP
    ```
-4. Sensors will auto-appear in Home Assistant
+4. Reload MQTT integration in Home Assistant to discover sensors
 
 ### Deployment - Fan Control Only
 
@@ -131,28 +128,26 @@ If you want both monitoring and control:
    cd ../unas_monitor
    ./deploy_unas_monitor.sh root@YOUR_UNAS_IP
    ```
-5. Configure Home Assistant (see service READMEs)
+5. Reload MQTT in Home Assistant to discover all devices and sensors
 
 ## How It Works
 
 **UNAS Monitor (unas_monitor):**
-- Reads drive temps via SMART every 10 seconds
-- Reads CPU temp from thermal zone
-- Reads current fan PWM value
-- Reads storage pool usage from df
-- Publishes all to MQTT → HA auto-discovers sensors
-- **Does not change fan behavior**
+- Reads drive SMART data and system metrics every 10 seconds
+- Publishes all data to MQTT with auto-discovery enabled
+- Home Assistant automatically creates organized devices and sensors
+- **Does not change fan behavior** - read-only monitoring
 
 **Fan Control (fan_control):**
 - Reads drive temps via SMART every 1 second
-- Calculates fan speed using linear curve
-- Checks MQTT for override commands from HA
+- Calculates fan speed using configurable linear curve
+- Checks MQTT for override commands from Home Assistant
 - Applies fan speed via PWM control
 - Publishes current fan speed to MQTT (if HA integration enabled)
 - **Overrides UNAS firmware fan control**
 
 **Home Assistant Integration (when both deployed):**
-- User toggles auto/override mode or adjusts fan speed slider
+- User toggles auto/override mode or adjusts fan speed slider in HA
 - HA publishes MQTT message with desired fan speed (or "auto")
 - Fan control service reads override and applies it
 - UNAS monitor shows real-time results
@@ -162,11 +157,11 @@ If you want both monitoring and control:
 
 ### UNAS Monitor Service
 See [unas_monitor/README.md](unas_monitor/README.md) for details on:
-- Configuring monitored metrics
-- MQTT sensor setup
-- Home Assistant configuration
-- Adding new metrics (SMART health, drive hours, etc.)
-- Viewing logs
+- What metrics are monitored and published
+- MQTT sensor configuration
+- Home Assistant setup and device organization
+- Extending with additional metrics
+- Troubleshooting
 
 ### Fan Control Service
 See [fan_control/README.md](fan_control/README.md) for details on:
@@ -199,7 +194,7 @@ Services will auto-restart and resume normal operation.
 
 ## Requirements
 
-- UNAS Pro running UniFi OS 4.2.6+
+- UNAS Pro running Unifi OS 4.2.6+
 - Root SSH access via SSH key
 - (Optional) Home Assistant with MQTT integration
 - (Optional) Mosquitto MQTT broker

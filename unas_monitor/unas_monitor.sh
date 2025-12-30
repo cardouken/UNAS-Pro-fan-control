@@ -69,13 +69,45 @@ publish_mqtt_sensor() {
         -m "$value"
 }
 
+# Function to read system info (uptime, versions, cpu, memory)
+read_system_info() {
+    local uptime_seconds unifi_os_version unifi_drive_version
+    local cpu_usage mem_total mem_used mem_percent
+    
+    # Get uptime in seconds
+    uptime_seconds=$(awk '{print int($1)}' /proc/uptime)
+    
+    # Get UniFi OS version (from unifi-core package)
+    unifi_os_version=$(dpkg -l | awk '/unifi-core/ {print $3}')
+    
+    # Get UniFi Drive version
+    unifi_drive_version=$(dpkg -l | awk '/^ii  unifi-drive / {print $3}')
+    
+    # Get CPU usage (100 - idle%)
+    cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8}' | awk -F. '{print $1}')
+    
+    # Get memory usage
+    mem_total=$(free -m | awk '/^Mem:/ {print $2}')
+    mem_used=$(free -m | awk '/^Mem:/ {print $3}')
+    mem_percent=$(awk "BEGIN {printf \"%.1f\", ($mem_used / $mem_total) * 100}")
+    
+    # Publish system info under main UNAS device
+    publish_mqtt_sensor "unas_uptime" "System Uptime" "$uptime_seconds" "s" "duration" "$UNAS_DEVICE"
+    publish_mqtt_sensor "unas_os_version" "UniFi OS Version" "$unifi_os_version" "" "" "$UNAS_DEVICE"
+    publish_mqtt_sensor "unas_drive_version" "UniFi Drive Version" "$unifi_drive_version" "" "" "$UNAS_DEVICE"
+    publish_mqtt_sensor "unas_cpu_usage" "CPU Usage" "$cpu_usage" "%" "" "$UNAS_DEVICE"
+    publish_mqtt_sensor "unas_memory_used" "Memory Used" "$mem_used" "MB" "data_size" "$UNAS_DEVICE"
+    publish_mqtt_sensor "unas_memory_total" "Memory Total" "$mem_total" "MB" "data_size" "$UNAS_DEVICE"
+    publish_mqtt_sensor "unas_memory_usage" "Memory Usage" "$mem_percent" "%" "" "$UNAS_DEVICE"
+}
+
 # Function to read comprehensive drive data (SMART attributes + disk usage)
 read_drive_data() {
     local dev smart_output temp model serial rpm status health power_hours bad_sectors firmware
     local total_size_bytes total_size_tb used_size_tb manufacturer
     local hdd_devices
 
-    # get list of drives
+    # Get list of drives dynamically
     read -ra hdd_devices <<< "$(detect_drives)"
 
     for dev in "${hdd_devices[@]}"; do
@@ -229,6 +261,9 @@ monitor_system() {
 
         cpu_temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
         cpu_temp=$((cpu_temp / 1000))
+
+        # Read system info (uptime, versions, cpu, memory)
+        read_system_info
 
         # Read all drive data (SMART attributes)
         read_drive_data
