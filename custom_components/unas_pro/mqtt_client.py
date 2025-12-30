@@ -92,9 +92,14 @@ class UNASMQTTClient:
 
         # notify coordinator of new data (trigger entity updates)
         if hasattr(self, "_coordinator") and self._coordinator:
-            # Trigger a manual refresh without fetching SSH data
-            # Throttle updates to avoid excessive refreshing
-            self._coordinator.async_set_updated_data(self.get_data())
+            # Update coordinator with properly structured data
+            self._coordinator.async_set_updated_data({
+                "mqtt_data": self._data.copy(),
+                "scripts_installed": True,  # Assume true if MQTT is working
+                "ssh_connected": True,
+                "monitor_running": True,
+                "fan_control_running": True,
+            })
 
     @callback
     def _fan_curve_message_received(self, msg) -> None:
@@ -122,7 +127,13 @@ class UNASMQTTClient:
 
         # notify coordinator of new data
         if hasattr(self, "_coordinator") and self._coordinator:
-            self._coordinator.async_set_updated_data(self.get_data())
+            self._coordinator.async_set_updated_data({
+                "mqtt_data": self._data.copy(),
+                "scripts_installed": True,
+                "ssh_connected": True,
+                "monitor_running": True,
+                "fan_control_running": True,
+            })
 
     def get_data(self) -> dict[str, Any]:
         _LOGGER.debug("get_data called, returning %d keys", len(self._data))

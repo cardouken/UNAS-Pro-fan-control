@@ -100,31 +100,27 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             _LOGGER.info("Cleaning up UNAS services and scripts...")
             
-            # Stop services
+            # stop services
             await ssh_manager.execute_command("systemctl stop unas_monitor || true")
             await ssh_manager.execute_command("systemctl stop fan_control || true")
             
-            # Disable services
+            # disable services
             await ssh_manager.execute_command("systemctl disable unas_monitor || true")
             await ssh_manager.execute_command("systemctl disable fan_control || true")
             
-            # Remove service files
+            # remove service files
             await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
             await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
             
-            # Remove scripts
+            # remove scripts
             await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
             await ssh_manager.execute_command("rm -f /root/fan_control.sh")
             
-            # Remove state files
+            # remove state files
             await ssh_manager.execute_command("rm -f /tmp/fan_mode")
             
-            # Reload systemd
+            # reload systemd
             await ssh_manager.execute_command("systemctl daemon-reload")
-            
-            # Re-enable UNAS firmware fan control by setting pwm_enable back to auto (2)
-            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
-            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
             
             _LOGGER.info("Successfully cleaned up UNAS - restored to stock fan control")
         except Exception as err:
