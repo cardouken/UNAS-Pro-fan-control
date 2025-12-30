@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Fan control service for UNAS Pro with configurable piecewise linear fan curve.
+# Supports both CPU and HDD temperature monitoring with MQTT override capability.
 #
 # See UNAS Pro fan speed curve calculator in Google Sheets to calculate the desired fan speed values:
 # https://docs.google.com/spreadsheets/d/1tRFY_sbZ05NGviTWXEZ2xo6C26Qct_KZbIP7jislLXI/edit?usp=sharing
@@ -13,13 +14,19 @@ CPU_TGT=70            # temperature where CPU fans start ramping up
 CPU_MAX=80            # temperature for full CPU fan
 
 # HDD fan curve parameters (piecewise)
-HDD_MIN_TEMP=43           # temp at which fans stay at baseline
-HDD_SMOOTH_MAX=47         # temp at which fans reach gentle top
-HDD_GENTLE_TOP=1.00       # fan % (0.38=38%) at HDD_SMOOTH_MAX
+HDD_MIN_TEMP=38           # temp at which fans stay at baseline
+HDD_SMOOTH_MAX=49         # temp at which fans reach gentle top
+HDD_GENTLE_TOP=0.38       # fan % (0.38=38%) at HDD_SMOOTH_MAX
 HDD_JUMP_TEMP=47          # temp at which fans jump to jump level
-HDD_JUMP_LEVEL=1.00       # fan % (0.60=60%) at jump temp
+HDD_JUMP_LEVEL=0.6       # fan % (0.60=60%) at jump temp
 HDD_AFTER_JUMP_STEP=0.05  # fan % (0.05=5%) to increase fans per °C above jump temp
-MIN_FAN=204               # baseline PWM to keep fans at (64=~25%)
+MIN_FAN=64               # baseline PWM to keep fans at (64=~25%)
+
+# MQTT config for override control
+MQTT_HOST="192.168.1.111"
+MQTT_USER="homeassistant"
+MQTT_PASS="unas_password_123"
+OVERRIDE_FILE="/tmp/fan_override"
 
 # Service parameters
 SERVICE_INTERVAL=1       # how often to check temperatures in service mode (seconds)
@@ -27,17 +34,6 @@ SERVICE_INTERVAL=1       # how often to check temperatures in service mode (seco
 # CPU and HDD devices arrays
 cpu_devices=("hwmon/hwmon0/temp1_input" "hwmon/hwmon0/temp2_input" "hwmon/hwmon0/temp3_input" "thermal/thermal_zone0/temp")
 hdd_devices=(sda sdb sdc sdd sde sdf sdg)
-
-# Parameter checks
-#if [ "$HDD_SMOOTH_MAX" -le "$HDD_MIN_TEMP" ]; then
-#    echo "Error: HDD_SMOOTH_MAX ($HDD_SMOOTH_MAX) must be greater than HDD_MIN_TEMP ($HDD_MIN_TEMP)" >&2
-#    exit 1
-#fi
-#
-#if [ "$CPU_MAX" -le "$CPU_TGT" ]; then
-#    echo "Error: CPU_MAX ($CPU_MAX) must be greater than CPU_TGT ($CPU_TGT)" >&2
-#    exit 1
-#fi
 
 # run as service: loop every N seconds based on SERVICE_INTERVAL, otherwise run once with logging
 LOGGING=true
@@ -50,6 +46,29 @@ fi
 log_echo() {
     if $LOGGING; then
         echo "$@"
+    fi
+}
+
+# Check for MQTT override
+check_mqtt_override() {
+    # Subscribe to override topic and write to file (timeout after 0.5s)
+    timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+        -t "homeassistant/unas/fan_override" -C 1 2>/dev/null > "$OVERRIDE_FILE" || true
+}
+
+get_override_value() {
+    if [ -f "$OVERRIDE_FILE" ]; then
+        local override_val=$(cat "$OVERRIDE_FILE" 2>/dev/null || echo "")
+        # Check if it's "auto" or a valid number 0-255
+        if [ "$override_val" = "auto" ]; then
+            echo "auto"
+        elif [[ "$override_val" =~ ^[0-9]+$ ]] && [ "$override_val" -ge 0 ] && [ "$override_val" -le 255 ]; then
+            echo "$override_val"
+        else
+            echo "auto"
+        fi
+    else
+        echo "auto"
     fi
 }
 
@@ -88,7 +107,6 @@ read_all_temperatures() {
         fi
     done
 }
-
 
 calculate_fan_speeds() {
     local cpu_temp=$1
@@ -135,39 +153,9 @@ calculate_fan_speeds() {
 }
 
 set_fan_speed() {
-    # Read CPU temperatures from sensors
-    read_all_temperatures
+    # Ensure manual fan control mode (prevents built-in controller interference)
+    echo 1 > /sys/class/hwmon/hwmon0/pwm1_enable 2>/dev/null || true
+    echo 1 > /sys/class/hwmon/hwmon0/pwm2_enable 2>/dev/null || true
 
-    # Calculate all fan speeds in single AWK call
-    calculate_fan_speeds "$CPU_TEMP" "$HDD_TEMP"
-
-    # Final fan speed: max of CPU_FAN, HDD_FAN, and MIN_FAN
-    FAN_SPEED=$(( CPU_FAN > HDD_FAN ? CPU_FAN : HDD_FAN ))
-    FAN_SPEED=$(( FAN_SPEED < MIN_FAN ? MIN_FAN : FAN_SPEED ))
-
-    # Logging
-    log_echo "== Fan Decision =="
-    log_echo "CPU Temp: ${CPU_TEMP}°C → CPU Fan PWM: ${CPU_FAN} ($((CPU_FAN * 100 / 255))%)"
-    log_echo "Max HDD Temp: ${HDD_TEMP}°C → HDD Fan PWM: ${HDD_FAN} ($((HDD_FAN * 100 / 255))%)"
-    log_echo "Final Fan PWM: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
-    log_echo "=================="
-
-    # Apply fan speed
-    echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm1
-    echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm2
-
-    if $LOGGING; then
-        echo "Confirmed fan speeds:"
-        cat /sys/class/hwmon/hwmon0/pwm1
-        cat /sys/class/hwmon/hwmon0/pwm2
-    fi
-}
-
-if $SERVICE; then
-    while true; do
-        set_fan_speed
-        sleep "$SERVICE_INTERVAL"
-    done
-else
-    set_fan_speed
-fi
+    # Check for override every iteration
+    check_mqtt_override

@@ -1,60 +1,232 @@
-# Ubiquiti UNAS Pro Fan Control Service
+# UNAS Pro Temperature Monitoring & Fan Control
 
-This is a fan control service using a linear fan curve that is deployed over SSH and runs via systemd. It's specifically designed for the [Ubiquiti UNAS Pro](https://ui.com/us/en/integrations/network-storage) to keep the HDDs cooler than the default fan controller.
+Fork of the original UNAS Pro fan control project, extended with Home Assistant integration via MQTT and remote
+temperature monitoring capabilities.
 
-It polls CPU and HDD temps (via SMART) to compute a fan speed once every minute. It persists between reboots and most updates, and can be quickly re-deployed if not.
+Note that this project is very much a proof-of-concept for personal use, and as such, is **not recommended for
+production use**. It may contain bugs, suboptimal code/features, and is not actively maintained.
 
-## Deployment
+## Overview
 
-- **Deploy remotely:** `./deploy.sh $HOST` to deploy to the UNAS over SSH.
-- **Query remotely:** `./query.sh $HOST` to query temperatures and fan speeds.
+This project provides two **independent** systemd services for the Ubiquiti UNAS Pro:
 
-### Manual Deployment
+1. **Temperature Monitoring** (`/temp_monitoring`) - Publishes drive and CPU temperatures to Home Assistant via MQTT
+2. **Fan Control** (`/fan_control`) - Temperature-based fan speed control with Home Assistant override capability
 
-To be run on the UNAS Pro directly.
+**Important:** These services are completely independent. You can use either one without the other:
+
+- **Just want temperature monitoring in HA?** → Deploy only `temp_monitoring`
+- **Want custom fan control without HA?** → Deploy only `fan_control` (remove MQTT code)
+- **Want both monitoring AND control in HA?** → Deploy both services
+
+Both services survive reboots and can be quickly redeployed after UNAS firmware updates.
+
+### Home Assistant dashboard example:
+
+<img src="HA_dashboard.png" width="400" alt="Home Assistant dashboard example">
+
+## Which Services Do I Need?
+
+### Scenario 1: Temperature Monitoring Only
+
+**You want:** Drive temps and fan speeds visible in Home Assistant  
+**Deploy:** `temp_monitoring` service only  
+**You get:**
+
+- All drive temperatures as HA sensors
+- CPU temperature as HA sensor
+- Current fan speed (PWM and %) as HA sensors
+- No changes to fan behavior (UNAS controls fans normally)
+
+### Scenario 2: Custom Fan Control Only
+
+**You want:** Better fan curve than stock UNAS firmware  
+**Deploy:** `fan_control` service only (optionally remove MQTT code)  
+**You get:**
+
+- Custom linear fan curve based on drive temps
+- No Home Assistant integration needed
+
+### Scenario 3: Full Integration (Recommended)
+
+**You want:** Everything - monitoring AND control from HA  
+**Deploy:** Both `temp_monitoring` and `fan_control` services  
+**You get:**
+
+- All temperature sensors in HA
+- Custom fan curves with HA override capability
+- Manual fan speed control from HA dashboard
+- Critical temperature failsafe automation
+- Full visibility and control
+
+## Features
+
+**Temperature Monitoring:**
+
+- Real-time monitoring for all drives and CPU
+- MQTT integration with Home Assistant auto-discovery
+- 10-second update interval
+- Read-only, safe to deploy
+
+**Fan Control:**
+
+- Configurable linear fan curve
+- Manual fan speed override from Home Assistant
+- Critical temperature failsafe (auto-switches to 100% fans)
+- 1-second response time
+
+**Both Services:**
+
+- Survive reboots via systemd
+- Auto-install dependencies
+- Quick redeployment after firmware updates
+
+## Quick Start
+
+### Prerequisites
+
+- UNAS Pro with SSH access
+- (Optional) Home Assistant instance with MQTT broker (Mosquitto)
+- (Optional) MQTT user credentials
+
+### Deployment - Temperature Monitoring Only
+
+If you only want temperatures in Home Assistant:
+
+1. Clone this repository
+2. Update MQTT credentials in `temp_monitoring/temp_monitor.sh`:
+   ```bash
+   MQTT_HOST="192.168.1.111"
+   MQTT_USER="homeassistant"
+   MQTT_PASS="your_password"
+   ```
+3. Deploy:
+   ```bash
+   cd temp_monitoring
+   ./deploy_temp_monitor.sh root@YOUR_UNAS_IP
+   ```
+4. Sensors will auto-appear in Home Assistant
+
+### Deployment - Fan Control Only
+
+If you only want custom fan curves (no HA integration):
+
+1. Clone this repository
+2. (Optional) Remove MQTT code from `fan_control/fan_control.sh` if you don't need HA integration
+3. Configure fan curve in `fan_control/fan_control.sh`:
+   ```bash
+   MIN_TEMP=43    # Start ramping up fans
+   MAX_TEMP=47    # Full speed
+   MIN_FAN=204    # 80% baseline
+   ```
+4. Deploy:
+   ```bash
+   cd fan_control
+   ./deploy_fan_control.sh root@YOUR_UNAS_IP
+   ```
+
+### Deployment - Full Integration
+
+If you want both monitoring and control:
+
+1. Clone this repository
+2. Update MQTT credentials in **both** scripts:
+    - `fan_control/fan_control.sh` - Update `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS`
+    - `temp_monitoring/temp_monitor.sh` - Update `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS`
+3. Configure fan curve in `fan_control/fan_control.sh` (see above)
+4. Deploy both services:
+   ```bash
+   cd fan_control
+   ./deploy_fan_control.sh root@YOUR_UNAS_IP
+   
+   cd ../temp_monitoring
+   ./deploy_temp_monitor.sh root@YOUR_UNAS_IP
+   ```
+5. Configure Home Assistant (see service READMEs)
+
+## How It Works
+
+**Temperature Monitoring (temp_monitoring):**
+
+- Reads drive temps via SMART every 10 seconds
+- Reads CPU temp from thermal zone
+- Reads current fan PWM value
+- Publishes all to MQTT → HA auto-discovers sensors
+- **Does not change fan behavior**
+
+**Fan Control (fan_control):**
+
+- Reads drive temps via SMART every 1 second
+- Calculates fan speed using linear curve
+- Checks MQTT for override commands from HA
+- Applies fan speed via PWM control
+- Publishes current fan speed to MQTT (if HA integration enabled)
+- **Overrides UNAS firmware fan control**
+
+**Home Assistant Integration (when both deployed):**
+
+- User toggles auto/override mode or adjusts fan speed slider
+- HA publishes MQTT message with desired fan speed (or "auto")
+- Fan control service reads override and applies it
+- Temperature monitor shows real-time results
+- Failsafe automation forces auto mode if temps too high
+
+## Components
+
+### Temperature Monitoring Service
+
+See [temp_monitoring/README.md](temp_monitoring/README.md) for details on:
+
+- MQTT sensor setup
+- Home Assistant configuration
+- Viewing logs
+
+### Fan Control Service
+
+See [fan_control/README.md](fan_control/README.md) for details on:
+
+- Fan curve configuration
+- MQTT override system
+- Deployment and testing
+- Choosing between simple and advanced scripts
+
+## Post-Update Redeployment
+
+UNAS firmware updates wipe custom scripts but preserve systemd service files. After an update, redeploy the services
+you're using:
+
+**Temperature monitoring only:**
+
 ```bash
-# Download latest fan_control.sh and fan_control.service from GitHub to their destinations
-wget -O /root/fan_control.sh https://raw.githubusercontent.com/hoxxep/UNAS-Pro-fan-control/refs/heads/main/fan_control.sh
-wget -O /etc/systemd/system/fan_control.service https://raw.githubusercontent.com/hoxxep/UNAS-Pro-fan-control/refs/heads/main/fan_control.service
-
-# Make fan_control executable
-chmod +x /root/fan_control.sh
-
-# Set up and restart the fan_control service
-systemctl daemon-reload
-systemctl enable fan_control.service
-systemctl restart fan_control.service
-systemctl status fan_control.service
+./temp_monitoring/deploy_temp_monitor.sh root@YOUR_UNAS_IP
 ```
 
-## Algorithm Parameters
+**Fan control only:**
 
-Adjust the `fan_control.sh` parameters to suit your needs. These fan curves, specifically `MAX` and `TGT` temps, are currently set to keep the drives under 40ºC in a warm cabinet (30ºC ambient).
-
-- `CPU_TGT=50`: The target CPU temp, at which fans will run at `MIN_FAN`.
-- `CPU_MAX=70`: The max CPU temp, where fans will run at 100%.
-- `HDD_TGT=32`: The target HDD temp, at which fans will run at `MIN_FAN`.
-- `HDD_MAX=50`: The max HDD temp, where fans will run at 100%.
-- `MIN_FAN=39`: The minimum fan speed, 15% of 255 (fan speeds are out of 255).
-
-Fan speed is set linearly between the TGT temp (MIN_FAN fan speed) and MAX temp (100% fan speed). The max temp of all HDDs is used as the HDD temp, and the max computed fan speed between the CPU and HDD speeds is used as the fan speed. Pseudocode and fan speed chart below.
-
-![Default fan speed chart](https://github.com/hoxxep/UNAS-Pro-fan-control/blob/main/CHART.png?raw=true)
-
-```python
-CPU_TEMP = max(all CPU temps)
-HDD_TEMP = max(all HDD temps)
-
-# compute point linearly between min and max
-CPU_FAN = (CPU_TEMP - CPU_MIN) / (CPU_MAX - CPU_MIN)
-HDD_FAN = (HDD_TEMP - HDD_MIN) / (HDD_MAX - HDD_MIN)
-
-# clip to range [MIN_FAN, 100%]
-FAN_FRAC = max(MIN_FAN, CPU_FAN, HDD_FAN)
-FAN_SPEED = 100% * min(FAN_FRAC, 1)
+```bash
+./fan_control/deploy_fan_control.sh root@YOUR_UNAS_IP
 ```
+
+**Both:**
+
+```bash
+./fan_control/deploy_fan_control.sh root@YOUR_UNAS_IP
+./temp_monitoring/deploy_temp_monitor.sh root@YOUR_UNAS_IP
+```
+
+Services will auto-restart and resume normal operation.
 
 ## Requirements
 
-- **Unifi OS:** UNAS Pro 4.2.6 and beyond.
-- **Deployment:** Root SSH access to the UNAS Pro via an SSH key and `~/.ssh/config` host [configured](https://goteleport.com/blog/how-to-set-up-ssh-keys/).
+- UNAS Pro running Unifi OS 4.2.6+
+- Root SSH access via SSH key
+- (Optional) Home Assistant with MQTT integration
+- (Optional) Mosquitto MQTT broker
+
+## License
+
+MIT License - see LICENSE.md
+
+## Credits
+
+Forked from [hoxxep/UNAS-Pro-fan-control](https://github.com/hoxxep/UNAS-Pro-fan-control)

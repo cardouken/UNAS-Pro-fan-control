@@ -6,14 +6,30 @@
 
 set -euo pipefail
 
-# Fan curve (linear between points)
-# 43°C and under: 80% (204 PWM)
-# 44°C: 85% (217 PWM)
-# 45°C: 90% (230 PWM)
-# 46°C: 95% (242 PWM)
-# 47°C+: 100% (255 PWM)
+# Fan curve configuration
+# Linear interpolation between MIN_TEMP and MAX_TEMP
+# Below MIN_TEMP: MIN_FAN speed
+# Above MAX_TEMP: MAX_FAN speed
+# Between: Linear scaling
 
-MIN_FAN=204               # 80% baseline
+MIN_TEMP=43               # Temperature (°C) where fans start ramping up from baseline
+MAX_TEMP=47               # Temperature (°C) where fans reach maximum speed
+MIN_FAN=204               # Baseline PWM (204 = 80%)
+MAX_FAN=255               # Maximum PWM (255 = 100%)
+
+# Example configurations:
+# Conservative (quieter, warmer drives):
+#   MIN_TEMP=40, MAX_TEMP=50, MIN_FAN=153 (60%), MAX_FAN=255 (100%)
+#   40°C: 60%, 45°C: 80%, 50°C: 100%
+#
+# Balanced (recommended for Noctua fans):
+#   MIN_TEMP=43, MAX_TEMP=47, MIN_FAN=204 (80%), MAX_FAN=255 (100%)
+#   43°C: 80%, 45°C: 90%, 47°C: 100%
+#
+# Aggressive (cooler, louder):
+#   MIN_TEMP=38, MAX_TEMP=45, MIN_FAN=178 (70%), MAX_FAN=255 (100%)
+#   38°C: 70%, 41.5°C: 85%, 45°C: 100%
+
 SERVICE_INTERVAL=1        # how often to check temperatures (seconds)
 
 # MQTT config for override control
@@ -23,7 +39,7 @@ MQTT_PASS="unas_password_123"
 OVERRIDE_FILE="/tmp/fan_override"
 
 # HDD devices
-hdd_devices=(sda sdb sdc sdd sde sdf sdg)
+hdd_devices=(sda sdb sdc sdd sde sdf)
 
 # run as service: loop every N seconds, otherwise run once with logging
 LOGGING=true
@@ -49,10 +65,10 @@ check_mqtt_override() {
 get_override_value() {
     if [ -f "$OVERRIDE_FILE" ]; then
         local override_val=$(cat "$OVERRIDE_FILE" 2>/dev/null || echo "")
-        # Check if it's "auto" or a valid number 0-255
+        # Check if it's "auto" or a valid number 0-MAX_FAN
         if [ "$override_val" = "auto" ]; then
             echo "auto"
-        elif [[ "$override_val" =~ ^[0-9]+$ ]] && [ "$override_val" -ge 0 ] && [ "$override_val" -le 255 ]; then
+        elif [[ "$override_val" =~ ^[0-9]+$ ]] && [ "$override_val" -ge 0 ] && [ "$override_val" -le "$MAX_FAN" ]; then
             echo "$override_val"
         else
             echo "auto"
@@ -81,19 +97,15 @@ read_hdd_temperatures() {
 calculate_fan_speed() {
     local hdd_temp=$1
 
-    # Simple linear interpolation: 43°C=204, 47°C=255
-    # Below 43°C: 204 (80%)
-    # 43-47°C: linear scale
-    # Above 47°C: 255 (100%)
-
-    if [ "$hdd_temp" -le 43 ]; then
-        FAN_SPEED=204
-    elif [ "$hdd_temp" -ge 47 ]; then
-        FAN_SPEED=255
+    # Simple linear interpolation between MIN_TEMP and MAX_TEMP
+    if [ "$hdd_temp" -le "$MIN_TEMP" ]; then
+        FAN_SPEED=$MIN_FAN
+    elif [ "$hdd_temp" -ge "$MAX_TEMP" ]; then
+        FAN_SPEED=$MAX_FAN
     else
-        # Linear: 204 + (temp - 43) * (255 - 204) / (47 - 43)
-        # = 204 + (temp - 43) * 12.75
-        FAN_SPEED=$(awk -v temp="$hdd_temp" 'BEGIN {print int(204 + (temp - 43) * 12.75)}')
+        # Linear: MIN_FAN + (temp - MIN_TEMP) * (MAX_FAN - MIN_FAN) / (MAX_TEMP - MIN_TEMP)
+        FAN_SPEED=$(awk -v temp="$hdd_temp" -v min_temp="$MIN_TEMP" -v max_temp="$MAX_TEMP" -v min_fan="$MIN_FAN" -v max_fan="$MAX_FAN" \
+            'BEGIN {print int(min_fan + (temp - min_temp) * (max_fan - min_fan) / (max_temp - min_temp))}')
     fi
 }
 
@@ -108,7 +120,7 @@ set_fan_speed() {
 
     if [ "$override" != "auto" ]; then
         FAN_SPEED=$override
-        echo "MANUAL OVERRIDE MODE ACTIVE: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
+        echo "MANUAL OVERRIDE MODE ACTIVE: ${FAN_SPEED} ($((FAN_SPEED * 100 / MAX_FAN))%)"
 
         # Publish override fan speed
         mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
@@ -119,7 +131,7 @@ set_fan_speed() {
         calculate_fan_speed "$HDD_TEMP"
 
         log_echo "== Fan Decision =="
-        log_echo "Max HDD Temp: ${HDD_TEMP}°C → Fan PWM: ${FAN_SPEED} ($((FAN_SPEED * 100 / 255))%)"
+        log_echo "Max HDD Temp: ${HDD_TEMP}°C → Fan PWM: ${FAN_SPEED} ($((FAN_SPEED * 100 / MAX_FAN))%)"
         log_echo "=================="
 
         # Publish auto-calculated fan speed
