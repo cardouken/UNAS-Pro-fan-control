@@ -18,7 +18,7 @@ This project provides two **independent** systemd services for the UniFi UNAS Pr
 Both services survive reboots and can be quickly redeployed after UNAS firmware updates.
 
 ### HA Dashboard Example
-<img src="HA_dashboard.png" width="480" alt="Home Assistant dashboard example">
+![HA Dashboard Example](HA_dashboard.png)
 
 ## Which Services Do I Need?
 
