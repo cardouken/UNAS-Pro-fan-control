@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to UNAS Pro",
+        "description": "Enter your UNAS Pro SSH credentials and MQTT broker details. Root access is required to install monitoring scripts.",
+        "data": {
+          "host": "Host (IP Address)",
+          "username": "Username",
+          "password": "Password",
+          "mqtt_host": "MQTT Broker Host",
+          "mqtt_user": "MQTT Username",
+          "mqtt_password": "MQTT Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to UNAS Pro. Please check the IP address and credentials.",
+      "timeout_connect": "Connection timed out. Please check that SSH is enabled on your UNAS Pro.",
+      "unknown": "Unexpected error occurred. Please check the logs."
+    },
+    "abort": {
+      "already_configured": "This UNAS Pro is already configured."
+    }
+  }
+}
