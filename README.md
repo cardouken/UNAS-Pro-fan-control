@@ -1,6 +1,6 @@
 # UNAS Pro Monitoring & Control
 
-Comprehensive monitoring and fan control for the Ubiquiti UNAS Pro, with full Home Assistant integration via MQTT.
+Comprehensive monitoring and fan control for the Ubiquiti UNAS Pro, with Home Assistant integration via MQTT.
 
 ## Overview
 
