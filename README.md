@@ -1,4 +1,4 @@
-# UNAS Pro Temperature Monitoring & Fan Control
+# UNAS Pro Monitoring & Fan Control
 
 Fork of the original UNAS Pro fan control project, extended with Home Assistant integration via MQTT and system monitoring.
 
