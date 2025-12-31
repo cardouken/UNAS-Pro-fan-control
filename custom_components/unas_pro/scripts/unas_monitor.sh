@@ -215,9 +215,13 @@ publish_storage_pool() {
 # Read storage pool usage from UniFi Drive /volume mounts
 read_storage_usage() {
     local pool_num=1
+    local -a volume_dirs
 
-    # Iterate through /volume mounts (each UUID is a storage pool)
-    for volume_dir in /volume/*; do
+    # collect and sort volume directories for consistent ordering
+    mapfile -t volume_dirs < <(find /volume -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
+
+    # Iterate through sorted /volume mounts (each UUID is a storage pool)
+    for volume_dir in "${volume_dirs[@]}"; do
         [ -d "$volume_dir" ] || continue
 
         local df_output=$(df -BG "$volume_dir" 2>/dev/null | tail -n 1)
