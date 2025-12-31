@@ -36,7 +36,6 @@ Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integra
 - **Fan Speed Slider** - Manual control in Set Speed mode
 - **Fan Curve Configuration** - Min/max temperature and fan speeds, linear curve
 - **Service Monitors** - Binary sensors for script health
-- **Reinstall Button** - Manual script redeployment
 
 ## Installation
 
