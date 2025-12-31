@@ -92,41 +92,43 @@ UNAS_SENSORS = [
     ),
     ("unas_os_version", "UniFi OS Version", None, None, None, "mdi:information"),
     ("unas_drive_version", "UniFi Drive Version", None, None, None, "mdi:information"),
+]
+
+# storage pool sensor patterns (will be created dynamically for each pool)
+STORAGE_POOL_SENSORS = [
     (
-        "unas_pool1_usage",
-        "Storage Pool 1 Usage",
+        "usage",
+        "Usage",
         PERCENTAGE,
         None,
         SensorStateClass.MEASUREMENT,
         "mdi:harddisk",
     ),
     (
-        "unas_pool1_size",
-        "Storage Pool 1 Size",
+        "size",
+        "Size",
         "GB",
         SensorDeviceClass.DATA_SIZE,
         None,
         None,
     ),
     (
-        "unas_pool1_used",
-        "Storage Pool 1 Used",
+        "used",
+        "Used",
         "GB",
         SensorDeviceClass.DATA_SIZE,
         SensorStateClass.MEASUREMENT,
         None,
     ),
     (
-        "unas_pool1_available",
-        "Storage Pool 1 Available",
+        "available",
+        "Available",
         "GB",
         SensorDeviceClass.DATA_SIZE,
         SensorStateClass.MEASUREMENT,
         None,
     ),
 ]
-
-# drive sensor patterns (will be created dynamically for each bay)
 DRIVE_SENSORS = [
     (
         "temperature",
@@ -180,14 +182,14 @@ async def async_setup_entry(
 
     # store add_entities callback for dynamic drive sensor creation
     coordinator.sensor_add_entities = async_add_entities
-    coordinator._discovered_bays = (
-        set()
-    )  # Track which bays we've already created sensors for
+    coordinator._discovered_bays = set()
+    coordinator._discovered_pools = set()
 
     # schedule initial drive sensor discovery after a delay to let MQTT data arrive
     async def discover_drives():
         await asyncio.sleep(10)  # Wait 10 seconds for MQTT data
         await _discover_and_add_drive_sensors(coordinator, async_add_entities)
+        await _discover_and_add_pool_sensors(coordinator, async_add_entities)
 
     hass.async_create_task(discover_drives())
 
@@ -250,6 +252,64 @@ async def _discover_and_add_drive_sensors(
         )
 
 
+async def _discover_and_add_pool_sensors(
+    coordinator: UNASDataUpdateCoordinator,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    mqtt_data = coordinator.mqtt_client.get_data()
+    detected_pools = set()
+
+    _LOGGER.debug(
+        "Discovering storage pools from MQTT data. Available keys: %d", len(mqtt_data)
+    )
+
+    for key in mqtt_data.keys():
+        if key.startswith("unas_pool") and "_usage" in key:
+            # extract pool number: unas_pool1_usage -> 1
+            pool_num = key.replace("unas_pool", "").replace("_usage", "")
+            detected_pools.add(pool_num)
+
+    # only process pools we haven't seen before
+    new_pools = detected_pools - coordinator._discovered_pools
+
+    if not new_pools:
+        if not detected_pools:
+            _LOGGER.debug("No storage pools detected in MQTT data yet")
+        return
+
+    _LOGGER.info(
+        "Discovered new storage pools: %s (total: %s)",
+        sorted(new_pools),
+        sorted(detected_pools),
+    )
+
+    # create sensors for each newly detected pool
+    entities = []
+    for pool_num in sorted(new_pools):
+        for sensor_suffix, name, unit, device_class, state_class, icon in STORAGE_POOL_SENSORS:
+            mqtt_key = f"unas_pool{pool_num}_{sensor_suffix}"
+            full_name = f"Storage Pool {pool_num} {name}"
+            entities.append(
+                UNASPoolSensor(
+                    coordinator,
+                    mqtt_key,
+                    full_name,
+                    pool_num,
+                    unit,
+                    device_class,
+                    state_class,
+                    icon,
+                )
+            )
+
+    if entities:
+        async_add_entities(entities)
+        coordinator._discovered_pools.update(new_pools)
+        _LOGGER.info(
+            "Added %d pool sensors for %d new pools", len(entities), len(new_pools)
+        )
+
+
 class UNASSensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
@@ -286,6 +346,55 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
+        mqtt_data = self.coordinator.data.get("mqtt_data", {})
+        return self._mqtt_key in mqtt_data
+
+    @property
+    def native_value(self):
+        mqtt_data = self.coordinator.data.get("mqtt_data", {})
+        return mqtt_data.get(self._mqtt_key)
+
+
+class UNASPoolSensor(CoordinatorEntity, SensorEntity):
+    def __init__(
+        self,
+        coordinator: UNASDataUpdateCoordinator,
+        mqtt_key: str,
+        name: str,
+        pool_num: str,
+        unit: str | None,
+        device_class: SensorDeviceClass | None,
+        state_class: SensorStateClass | None,
+        icon: str | None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._mqtt_key = mqtt_key
+        self._pool_num = pool_num
+        self._attr_name = f"UNAS Pro {name}"
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_{mqtt_key}"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        if icon:
+            self._attr_icon = icon
+
+        # storage pools belong to the main UNAS device
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
+            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
+            "manufacturer": "Ubiquiti",
+            "model": "UNAS Pro",
+        }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        mqtt_data = self.coordinator.data.get("mqtt_data", {})
+        self._attr_native_value = mqtt_data.get(self._mqtt_key)
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         return self._mqtt_key in mqtt_data
 
