@@ -74,10 +74,11 @@ publish_mqtt_sensor() {
     local sensor_name=$1
     local value=$3
     
-    # Only publish state - our integration creates the entities
+    # publish state with retain flag so entities get initial values
     mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
         -t "homeassistant/sensor/${sensor_name}/state" \
-        -m "$value"
+        -m "$value" \
+        -r
 }
 
 # Function to read system info (uptime, versions, cpu, memory)
@@ -225,7 +226,7 @@ read_storage_usage() {
         local df_output=$(df -BG "$volume_dir" 2>/dev/null | tail -n 1)
         [ -n "$df_output" ] || continue
 
-        read -r source size used avail pcent <<< "$df_output"
+        read -r source size used avail pcent mountpoint <<< "$df_output"
         local size_gb=${size%G}
 
         # Only process if larger than 75GB (avoid boot/system partitions)
