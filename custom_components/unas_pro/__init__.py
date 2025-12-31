@@ -33,6 +33,7 @@ PLATFORMS: list[Platform] = [
 
 # key to track last version that performed MQTT cleanup
 LAST_CLEANUP_VERSION_KEY = "last_cleanup_version"
+LAST_DEPLOY_VERSION_KEY = "last_deploy_version"
 PERFORM_MQTT_CLEANUP = True
 
 
@@ -45,7 +46,7 @@ async def _cleanup_old_mqtt_configs_on_upgrade(
     # get current version from manifest
     from homeassistant.loader import async_get_integration
     integration = await async_get_integration(hass, DOMAIN)
-    current_version = integration.version
+    current_version = str(integration.version)
 
     # get last cleanup version
     last_cleanup_version = entry.data.get(LAST_CLEANUP_VERSION_KEY)
@@ -141,12 +142,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await ssh_manager.connect()
         _LOGGER.info("SSH connection established to %s", entry.data[CONF_HOST])
 
-        # Deploy scripts on first setup
-        if not await ssh_manager.scripts_installed():
-            _LOGGER.info("Scripts not found, deploying...")
+        # deploy scripts on version change or if missing
+        from homeassistant.loader import async_get_integration
+        integration = await async_get_integration(hass, DOMAIN)
+        current_version = str(integration.version)
+        last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
+        scripts_installed = await ssh_manager.scripts_installed()
+
+        if last_deploy_version != current_version or not scripts_installed:
+            if not scripts_installed:
+                _LOGGER.info("Scripts not found, deploying...")
+            else:
+                _LOGGER.info(
+                    "Integration upgraded from %s to %s - redeploying scripts",
+                    last_deploy_version or "unknown",
+                    current_version,
+                )
             await ssh_manager.deploy_scripts()
+
+            # mark this version as deployed
+            new_data = dict(entry.data)
+            new_data[LAST_DEPLOY_VERSION_KEY] = current_version
+            hass.config_entries.async_update_entry(entry, data=new_data)
         else:
-            _LOGGER.info("Scripts already installed")
+            _LOGGER.info("Scripts up to date (version %s)", current_version)
 
     except Exception as err:
         _LOGGER.error("Failed to connect to UNAS: %s", err)
