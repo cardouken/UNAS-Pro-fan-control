@@ -45,6 +45,7 @@ async def _cleanup_old_mqtt_configs_on_upgrade(
 
     # get current version from manifest
     from homeassistant.loader import async_get_integration
+
     integration = await async_get_integration(hass, DOMAIN)
     current_version = str(integration.version)
 
@@ -117,9 +118,7 @@ async def _cleanup_old_mqtt_configs_on_upgrade(
         except Exception as err:
             _LOGGER.debug("Failed to clear MQTT config for %s: %s", topic, err)
 
-    _LOGGER.info(
-        "Cleared %d old MQTT auto-discovery configs", cleared_count
-    )
+    _LOGGER.info("Cleared %d old MQTT auto-discovery configs", cleared_count)
 
     # mark this version as cleaned up
     new_data = dict(entry.data)
@@ -144,6 +143,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # deploy scripts on version change or if missing
         from homeassistant.loader import async_get_integration
+
         integration = await async_get_integration(hass, DOMAIN)
         current_version = str(integration.version)
         last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
@@ -224,8 +224,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await ssh_manager.execute_command("systemctl disable fan_control || true")
 
             # Remove service files
-            await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
-            await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
+            await ssh_manager.execute_command(
+                "rm -f /etc/systemd/system/unas_monitor.service"
+            )
+            await ssh_manager.execute_command(
+                "rm -f /etc/systemd/system/fan_control.service"
+            )
 
             # Remove scripts
             await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
@@ -238,8 +242,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await ssh_manager.execute_command("systemctl daemon-reload")
 
             # Re-enable UNAS firmware fan control by setting pwm_enable back to auto (2)
-            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
-            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
+            await ssh_manager.execute_command(
+                "echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true"
+            )
+            await ssh_manager.execute_command(
+                "echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true"
+            )
 
             _LOGGER.info("Successfully cleaned up UNAS - restored to stock fan control")
         except Exception as err:
@@ -253,11 +261,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 class UNASDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(
-            self,
-            hass: HomeAssistant,
-            ssh_manager: SSHManager,
-            mqtt_client: UNASMQTTClient,
-            entry: ConfigEntry,
+        self,
+        hass: HomeAssistant,
+        ssh_manager: SSHManager,
+        mqtt_client: UNASMQTTClient,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize."""
         self.ssh_manager = ssh_manager
@@ -274,9 +282,13 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         # check if MQTT integration is still available
         from homeassistant.components import mqtt
+
         if mqtt.DOMAIN not in self.hass.data:
-            _LOGGER.error("MQTT integration has been removed - UNAS Pro requires MQTT to function")
+            _LOGGER.error(
+                "MQTT integration has been removed - UNAS Pro requires MQTT to function"
+            )
             from homeassistant.helpers import issue_registry as ir
+
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -304,9 +316,12 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
 
             # check for new drives and pools when sensor platform is ready
             if hasattr(self, "sensor_add_entities") and hasattr(
-                    self, "_discovered_bays"
+                self, "_discovered_bays"
             ):
-                from .sensor import _discover_and_add_drive_sensors, _discover_and_add_pool_sensors
+                from .sensor import (
+                    _discover_and_add_drive_sensors,
+                    _discover_and_add_pool_sensors,
+                )
 
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
                 await _discover_and_add_pool_sensors(self, self.sensor_add_entities)

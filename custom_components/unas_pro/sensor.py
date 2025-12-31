@@ -286,7 +286,14 @@ async def _discover_and_add_pool_sensors(
     # create sensors for each newly detected pool
     entities = []
     for pool_num in sorted(new_pools):
-        for sensor_suffix, name, unit, device_class, state_class, icon in STORAGE_POOL_SENSORS:
+        for (
+            sensor_suffix,
+            name,
+            unit,
+            device_class,
+            state_class,
+            icon,
+        ) in STORAGE_POOL_SENSORS:
             mqtt_key = f"unas_pool{pool_num}_{sensor_suffix}"
             full_name = f"Storage Pool {pool_num} {name}"
             entities.append(
