@@ -30,17 +30,14 @@ MQTT_PASS="unas_password_123"
 UNAS_DEVICE='{"identifiers":["unas_pro"],"name":"UNAS Pro","manufacturer":"Ubiquiti","model":"UNAS Pro"}'
 
 # UNAS Pro bay mapping (ATA port -> physical bay number as shown in Unifi UI)
-# Physical layout: Top row (L-R): 1,2,3  Bottom row (L-R): 4,5,6,7
-# Mapping is based on UNAS Pro hardware design
 declare -A ATA_TO_BAY_MAP=(
-    ["1"]="6"   # ata1 -> Bay 6 (bottom middle-right)
-    ["2"]="7"   # ata2 -> Bay 7 (bottom right)
-    ["3"]="0"   # ata3 -> Not used for UNAS Pro with 7 bays?
-    ["4"]="3"   # ata4 -> Bay 3 (top right)
-    ["5"]="5"   # ata5 -> Bay 5 (bottom middle-left)
-    ["6"]="2"   # ata6 -> Bay 2 (top middle)
-    ["7"]="4"   # ata7 -> Bay 4 (bottom left)
-    ["8"]="1"   # ata8 -> Bay 1 (top left)
+    ["1"]="6"   # ata1 -> Bay 6
+    ["3"]="7"   # ata3 -> Bay 7
+    ["4"]="3"   # ata4 -> Bay 3
+    ["5"]="5"   # ata5 -> Bay 5
+    ["6"]="2"   # ata6 -> Bay 2
+    ["7"]="4"   # ata7 -> Bay 4
+    ["8"]="1"   # ata8 -> Bay 1
 )
 
 # Auto-detect all SATA/NVMe drives (excludes loop, ram, etc.)
