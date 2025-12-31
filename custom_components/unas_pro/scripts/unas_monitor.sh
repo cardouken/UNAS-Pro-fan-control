@@ -228,8 +228,8 @@ read_storage_usage() {
         read -r source size used avail pcent <<< "$df_output"
         local size_gb=${size%G}
 
-        # Only process if larger than 10GB (avoid boot/system partitions)
-        if [[ "$size_gb" -gt 10 ]]; then
+        # Only process if larger than 75GB (avoid boot/system partitions)
+        if [[ "$size_gb" -gt 75 ]]; then
             publish_storage_pool "$pool_num" "$size_gb" "${used%G}" "${avail%G}" "${pcent%\%}"
             pool_num=$((pool_num + 1))
         fi
