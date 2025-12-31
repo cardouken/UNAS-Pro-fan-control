@@ -20,7 +20,7 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 
 # Configuration
-MONITOR_INTERVAL=10
+MONITOR_INTERVAL=30
 
 MQTT_HOST="192.168.1.111"
 MQTT_USER="homeassistant"
