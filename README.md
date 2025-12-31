@@ -42,12 +42,18 @@ Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integra
 
 ### Prerequisites
 
-1. **Mosquitto MQTT Broker**
+1. **MQTT Integration** (Required)
+    - Settings → Devices & Services → Add Integration → MQTT
+    - If using Mosquitto add-on: Select automatic discovery
+    - If using external broker: Enter broker details manually
+
+2. **Mosquitto MQTT Broker** (Recommended)
     - Settings → Add-ons → Add-on Store → Mosquitto broker
     - Install, start, and enable "Start on boot"
     - Configure login credentials under Mosquitto broker add-on → Configuration → Options → Logins
+    - **Note**: You can use any MQTT broker, but Mosquitto add-on is easiest
 
-2. **SSH Access to UNAS Pro**
+3. **SSH Access to UNAS Pro**
     - Enable SSH access in UniFi Drive via Settings → Control Plane → Console → check "SSH" and configure password
 
 ### Install Integration
@@ -148,9 +154,10 @@ Common issues:
 
 ### Sensors Not Appearing
 
-1. Verify Mosquitto broker is running
-2. Check MQTT credentials are correct in integration config
-3. Check service status:
+1. **Verify MQTT integration is installed** (Settings → Devices & Services → MQTT)
+2. Verify Mosquitto broker is running
+3. Check MQTT credentials are correct in integration config
+4. Check service status:
    ```bash
    ssh root@YOUR_UNAS_IP
    systemctl status unas_monitor fan_control

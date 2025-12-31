@@ -8,6 +8,7 @@ import asyncssh
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.components import mqtt
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 
@@ -40,6 +41,15 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         errors: dict[str, str] = {}
+
+        # check if MQTT integration is loaded
+        if mqtt.DOMAIN not in self.hass.data:
+            return self.async_abort(
+                reason="mqtt_required",
+                description_placeholders={
+                    "error": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first."
+                },
+            )
 
         if user_input is not None:
             # Test SSH connection

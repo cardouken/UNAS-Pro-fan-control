@@ -69,30 +69,12 @@ get_bay_number() {
     fi
 }
 
-# Helper function to publish MQTT sensor with device grouping
+# Helper function to publish MQTT sensor state (no auto-discovery)
 publish_mqtt_sensor() {
     local sensor_name=$1
-    local friendly_name=$2
     local value=$3
-    local unit=$4
-    local device_class=${5:-}
-    local device_json=${6:-$UNAS_DEVICE}
     
-    local config_json="{\"name\":\"$friendly_name\",\"state_topic\":\"homeassistant/sensor/${sensor_name}/state\",\"unit_of_measurement\":\"$unit\",\"unique_id\":\"$sensor_name\",\"device\":$device_json"
-    
-    if [ -n "$device_class" ]; then
-        config_json="${config_json},\"device_class\":\"$device_class\""
-    fi
-    
-    config_json="${config_json}}"
-    
-    # Publish config
-    mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/sensor/${sensor_name}/config" \
-        -m "$config_json" \
-        -r
-    
-    # Publish state
+    # Only publish state - our integration creates the entities
     mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
         -t "homeassistant/sensor/${sensor_name}/state" \
         -m "$value"
@@ -166,24 +148,17 @@ read_drive_data() {
         
         # Parse RPM
         rpm=$(echo "$smart_output" | awk -F': ' '/Rotation Rate:/ {print $2}' | xargs)
-        if [ -z "$rpm" ] || [ "$rpm" = "Solid State Device" ]; then
-            rpm="SSD"
-        elif [[ ! "$rpm" =~ ^[0-9]+$ ]]; then
-            # Extract just the number if it has text like "7200 rpm"
-            rpm=$(echo "$rpm" | grep -oE '[0-9]+' | head -1)
-            [ -z "$rpm" ] && rpm="unknown"
-        fi
+        case "$rpm" in
+            ""|"Solid State Device") rpm="SSD" ;;
+            *[!0-9]*) rpm=$(echo "$rpm" | grep -oE '[0-9]+' | head -1); [ -z "$rpm" ] && rpm="unknown" ;;
+        esac
         
         # Extract manufacturer from model (usually just the first word)
         manufacturer=$(echo "$model" | awk '{print $1}')
         
         # SMART health status
         health=$(echo "$smart_output" | grep -i "SMART overall-health" | awk '{print $NF}' || echo "unknown")
-        if [ "$health" = "PASSED" ]; then
-            status="Optimal"
-        else
-            status="Warning"
-        fi
+        status=$([ "$health" = "PASSED" ] && echo "Optimal" || echo "Warning")
 
         # Get disk size from blockdev
         total_size_bytes=$(blockdev --getsize64 "/dev/$dev" 2>/dev/null || echo "0")
@@ -225,55 +200,40 @@ format_temperature_output() {
         fi
     done
 
-    local output=""
-    for i in "${!temps_output[@]}"; do
-        if [ "$i" -eq 0 ]; then
-            output="${temps_output[$i]}"
-        else
-            output="${output}, ${temps_output[$i]}"
-        fi
-    done
-
-    echo "$output"
+    (IFS=", "; echo "${temps_output[*]}")
 }
 
-# Read storage pool usage
+# Publish storage pool to MQTT
+publish_storage_pool() {
+    local pool_num=$1 size_gb=$2 used_gb=$3 avail_gb=$4 capacity_num=$5
+    local fs_name="pool${pool_num}"
+
+    publish_mqtt_sensor "unas_${fs_name}_usage" "Storage Pool ${pool_num} Usage" "$capacity_num"
+    publish_mqtt_sensor "unas_${fs_name}_size" "Storage Pool ${pool_num} Size" "$size_gb"
+    publish_mqtt_sensor "unas_${fs_name}_used" "Storage Pool ${pool_num} Used" "$used_gb"
+    publish_mqtt_sensor "unas_${fs_name}_available" "Storage Pool ${pool_num} Available" "$avail_gb"
+}
+
+# Read storage pool usage from UniFi Drive /volume mounts
 read_storage_usage() {
     local pool_num=1
-    local temp_file="/tmp/df_output.$$"
 
-    df -BG --output=source,size,used,avail,pcent 2>/dev/null | tail -n +2 > "$temp_file"
+    # Iterate through /volume mounts (each UUID is a storage pool)
+    for volume_dir in /volume/*; do
+        [ -d "$volume_dir" ] || continue
 
-    declare -A seen_devices
+        local df_output=$(df -BG "$volume_dir" 2>/dev/null | tail -n 1)
+        [ -n "$df_output" ] || continue
 
-    while read -r source size used avail pcent; do
-        # Skip tmpfs, devtmpfs, loop devices, and other virtual filesystems
-        [[ "$source" =~ ^(tmpfs|devtmpfs|overlay|shm|udev) ]] && continue
-        [[ "$source" =~ /loop ]] && continue
-        [[ ! "$source" =~ ^/dev/ ]] && continue
+        read -r source size used avail pcent <<< "$df_output"
+        local size_gb=${size%G}
 
-        size_gb=${size%G}
-
-        if [[ "$size_gb" -gt 100 ]]; then
-            [[ -n "${seen_devices[$source]:-}" ]] && continue
-            seen_devices[$source]=1
-
-            fs_name="pool${pool_num}"
-            capacity_num=${pcent%\%}
-            used_gb=${used%G}
-            avail_gb=${avail%G}
-
-            # Publish storage sensors under main UNAS device
-            publish_mqtt_sensor "unas_${fs_name}_usage" "Storage Pool ${pool_num} Usage" "$capacity_num" "%" "" "$UNAS_DEVICE"
-            publish_mqtt_sensor "unas_${fs_name}_size" "Storage Pool ${pool_num} Size" "$size_gb" "GB" "data_size" "$UNAS_DEVICE"
-            publish_mqtt_sensor "unas_${fs_name}_used" "Storage Pool ${pool_num} Used" "$used_gb" "GB" "data_size" "$UNAS_DEVICE"
-            publish_mqtt_sensor "unas_${fs_name}_available" "Storage Pool ${pool_num} Available" "$avail_gb" "GB" "data_size" "$UNAS_DEVICE"
-
+        # Only process if larger than 10GB (avoid boot/system partitions)
+        if [[ "$size_gb" -gt 10 ]]; then
+            publish_storage_pool "$pool_num" "$size_gb" "${used%G}" "${avail%G}" "${pcent%\%}"
             pool_num=$((pool_num + 1))
         fi
-    done < "$temp_file"
-
-    rm -f "$temp_file"
+    done
 }
 
 # Main monitoring loop

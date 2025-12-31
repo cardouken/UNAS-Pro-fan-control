@@ -207,12 +207,6 @@ set_fan_speed() {
             -m "$FAN_SPEED"
     fi
 
-    # Auto-discovery config (publish once per iteration is fine)
-    mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/sensor/unas_fan_speed/config" \
-        -m "{\"name\":\"UNAS Fan Speed\",\"state_topic\":\"homeassistant/sensor/unas_fan_speed/state\",\"unit_of_measurement\":\"PWM\",\"unique_id\":\"unas_fan_speed\"}" \
-        -r
-
     if $LOGGING; then
         echo "Confirmed fan speeds:"
         cat /sys/class/hwmon/hwmon0/pwm1
