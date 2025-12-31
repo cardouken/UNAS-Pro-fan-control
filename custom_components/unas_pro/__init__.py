@@ -272,6 +272,21 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self):
+        # check if MQTT integration is still available
+        from homeassistant.components import mqtt
+        if mqtt.DOMAIN not in self.hass.data:
+            _LOGGER.error("MQTT integration has been removed - UNAS Pro requires MQTT to function")
+            from homeassistant.helpers import issue_registry as ir
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                "mqtt_missing",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="mqtt_missing",
+            )
+            raise UpdateFailed("MQTT integration is required but not found")
+
         try:
             # check if scripts are still installed (firmware update detection)
             scripts_installed = await self.ssh_manager.scripts_installed()

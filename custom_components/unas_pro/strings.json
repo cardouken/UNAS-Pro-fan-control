@@ -23,5 +23,11 @@
       "already_configured": "This UNAS Pro is already configured.",
       "mqtt_required": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first, then try again."
     }
+  },
+  "issues": {
+    "mqtt_missing": {
+      "title": "MQTT Integration Required",
+      "description": "The MQTT integration has been removed but is required for UNAS Pro to function. Please re-add the MQTT integration or remove the UNAS Pro integration."
+    }
   }
 }
