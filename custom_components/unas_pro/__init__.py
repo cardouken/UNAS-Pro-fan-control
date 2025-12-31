@@ -31,6 +31,100 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER,
 ]
 
+# key to track last version that performed MQTT cleanup
+LAST_CLEANUP_VERSION_KEY = "last_cleanup_version"
+PERFORM_MQTT_CLEANUP = True
+
+
+async def _cleanup_old_mqtt_configs_on_upgrade(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    if not PERFORM_MQTT_CLEANUP:
+        return
+
+    # get current version from manifest
+    from homeassistant.loader import async_get_integration
+    integration = await async_get_integration(hass, DOMAIN)
+    current_version = integration.version
+
+    # get last cleanup version
+    last_cleanup_version = entry.data.get(LAST_CLEANUP_VERSION_KEY)
+
+    # run cleanup if version changed or never run before
+    if last_cleanup_version != current_version:
+        _LOGGER.info(
+            "Integration upgraded from %s to %s - running MQTT config cleanup",
+            last_cleanup_version or "unknown",
+            current_version,
+        )
+
+    from homeassistant.components import mqtt
+
+    # list of topics to clear (system sensors)
+    topics_to_clear = [
+        "unas_uptime",
+        "unas_os_version",
+        "unas_drive_version",
+        "unas_cpu_usage",
+        "unas_memory_used",
+        "unas_memory_total",
+        "unas_memory_usage",
+        "unas_cpu",
+        "unas_fan_speed",
+        "unas_fan_speed_percent",
+    ]
+
+    # storage pool sensors (up to 5 pools)
+    for i in range(1, 6):
+        topics_to_clear.extend(
+            [
+                f"unas_pool{i}_usage",
+                f"unas_pool{i}_size",
+                f"unas_pool{i}_used",
+                f"unas_pool{i}_available",
+            ]
+        )
+
+    # HDD sensors (bays 1-7)
+    for bay in range(1, 8):
+        topics_to_clear.extend(
+            [
+                f"unas_hdd_{bay}_temperature",
+                f"unas_hdd_{bay}_model",
+                f"unas_hdd_{bay}_serial",
+                f"unas_hdd_{bay}_rpm",
+                f"unas_hdd_{bay}_firmware",
+                f"unas_hdd_{bay}_status",
+                f"unas_hdd_{bay}_total_size",
+                f"unas_hdd_{bay}_power_hours",
+                f"unas_hdd_{bay}_bad_sectors",
+            ]
+        )
+
+    # clear each config topic by publishing empty retained message
+    cleared_count = 0
+    for topic in topics_to_clear:
+        try:
+            await mqtt.async_publish(
+                hass,
+                f"homeassistant/sensor/{topic}/config",
+                "",
+                qos=0,
+                retain=True,
+            )
+            cleared_count += 1
+        except Exception as err:
+            _LOGGER.debug("Failed to clear MQTT config for %s: %s", topic, err)
+
+    _LOGGER.info(
+        "Cleared %d old MQTT auto-discovery configs", cleared_count
+    )
+
+    # mark this version as cleaned up
+    new_data = dict(entry.data)
+    new_data[LAST_CLEANUP_VERSION_KEY] = current_version
+    hass.config_entries.async_update_entry(entry, data=new_data)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ssh_manager = SSHManager(
@@ -84,51 +178,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Subscribe to MQTT topics
     await mqtt_client.async_subscribe()
 
+    # cleanup old MQTT configs on upgrade (runs every version change)
+    await _cleanup_old_mqtt_configs_on_upgrade(hass, entry)
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         data = hass.data[DOMAIN].pop(entry.entry_id)
-        
+
         # clean up MQTT subscription
         await data["mqtt_client"].async_unsubscribe()
-        
+
         # stop and remove services from UNAS to restore stock behavior
         ssh_manager = data["ssh_manager"]
         try:
             _LOGGER.info("Cleaning up UNAS services and scripts...")
-            
+
             # Stop services
             await ssh_manager.execute_command("systemctl stop unas_monitor || true")
             await ssh_manager.execute_command("systemctl stop fan_control || true")
-            
+
             # Disable services
             await ssh_manager.execute_command("systemctl disable unas_monitor || true")
             await ssh_manager.execute_command("systemctl disable fan_control || true")
-            
+
             # Remove service files
             await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
             await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
-            
+
             # Remove scripts
             await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
             await ssh_manager.execute_command("rm -f /root/fan_control.sh")
-            
+
             # Remove state files
             await ssh_manager.execute_command("rm -f /tmp/fan_mode")
-            
+
             # Reload systemd
             await ssh_manager.execute_command("systemctl daemon-reload")
-            
+
             # Re-enable UNAS firmware fan control by setting pwm_enable back to auto (2)
             await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
             await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
-            
+
             _LOGGER.info("Successfully cleaned up UNAS - restored to stock fan control")
         except Exception as err:
             _LOGGER.error("Failed to clean up UNAS (non-critical): %s", err)
-        
+
         # Disconnect SSH
         await ssh_manager.disconnect()
 
@@ -137,11 +234,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 class UNASDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(
-        self,
-        hass: HomeAssistant,
-        ssh_manager: SSHManager,
-        mqtt_client: UNASMQTTClient,
-        entry: ConfigEntry,
+            self,
+            hass: HomeAssistant,
+            ssh_manager: SSHManager,
+            mqtt_client: UNASMQTTClient,
+            entry: ConfigEntry,
     ) -> None:
         """Initialize."""
         self.ssh_manager = ssh_manager
@@ -173,7 +270,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
 
             # check for new drives and pools when sensor platform is ready
             if hasattr(self, "sensor_add_entities") and hasattr(
-                self, "_discovered_bays"
+                    self, "_discovered_bays"
             ):
                 from .sensor import _discover_and_add_drive_sensors, _discover_and_add_pool_sensors
 
