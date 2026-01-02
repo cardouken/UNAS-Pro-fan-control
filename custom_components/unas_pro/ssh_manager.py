@@ -113,6 +113,51 @@ class SSHManager:
                     'MQTT_PASS="unas_password_123"', f'MQTT_PASS="{self.mqtt_password}"'
                 )
 
+                # Validate that credentials were actually replaced (unless they match defaults)
+                # Only validate if the user credentials differ from defaults
+                if (
+                    self.mqtt_host != "192.168.1.111"
+                    and 'MQTT_HOST="192.168.1.111"' in monitor_script
+                ):
+                    raise ValueError("Failed to replace MQTT_HOST in monitor script")
+                if (
+                    self.mqtt_user != "homeassistant"
+                    and 'MQTT_USER="homeassistant"' in monitor_script
+                ):
+                    raise ValueError("Failed to replace MQTT_USER in monitor script")
+                if (
+                    self.mqtt_password != "unas_password_123"
+                    and 'MQTT_PASS="unas_password_123"' in monitor_script
+                ):
+                    raise ValueError("Failed to replace MQTT_PASS in monitor script")
+                if (
+                    self.mqtt_host != "192.168.1.111"
+                    and 'MQTT_HOST="192.168.1.111"' in fan_control_script
+                ):
+                    raise ValueError(
+                        "Failed to replace MQTT_HOST in fan control script"
+                    )
+                if (
+                    self.mqtt_user != "homeassistant"
+                    and 'MQTT_USER="homeassistant"' in fan_control_script
+                ):
+                    raise ValueError(
+                        "Failed to replace MQTT_USER in fan control script"
+                    )
+                if (
+                    self.mqtt_password != "unas_password_123"
+                    and 'MQTT_PASS="unas_password_123"' in fan_control_script
+                ):
+                    raise ValueError(
+                        "Failed to replace MQTT_PASS in fan control script"
+                    )
+
+                _LOGGER.info(
+                    "MQTT credentials validated in scripts (host=%s, user=%s)",
+                    self.mqtt_host,
+                    self.mqtt_user,
+                )
+
             await self._upload_file(
                 "/root/unas_monitor.sh", monitor_script, executable=True
             )

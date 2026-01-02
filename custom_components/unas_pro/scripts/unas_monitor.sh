@@ -67,9 +67,12 @@ get_bay_number() {
 }
 
 # Helper function to publish MQTT sensor state (no auto-discovery)
+# Parameters: sensor_name, friendly_name (unused), value, unit (unused), device_class (unused), device_info (unused)
 publish_mqtt_sensor() {
     local sensor_name=$1
+    local friendly_name=$2  # Not used, but accepted for compatibility
     local value=$3
+    # Remaining parameters ($4-$6) are not used for state publishing
     
     # publish state with retain flag so entities get initial values
     mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \

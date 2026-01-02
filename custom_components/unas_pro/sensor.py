@@ -185,11 +185,43 @@ async def async_setup_entry(
     coordinator._discovered_bays = set()
     coordinator._discovered_pools = set()
 
-    # schedule initial drive sensor discovery after a delay to let MQTT data arrive
+    # schedule initial drive sensor discovery with retry logic
     async def discover_drives():
-        await asyncio.sleep(10)  # Wait 10 seconds for MQTT data
-        await _discover_and_add_drive_sensors(coordinator, async_add_entities)
-        await _discover_and_add_pool_sensors(coordinator, async_add_entities)
+        max_retries = 6
+        retry_delay = 10  # seconds
+
+        for attempt in range(max_retries):
+            _LOGGER.debug("Drive discovery attempt %d/%d", attempt + 1, max_retries)
+
+            # Wait for MQTT data to arrive
+            await asyncio.sleep(retry_delay)
+
+            # Try to discover drives and pools
+            await _discover_and_add_drive_sensors(coordinator, async_add_entities)
+            await _discover_and_add_pool_sensors(coordinator, async_add_entities)
+
+            # Check if we found any drives
+            if coordinator._discovered_bays or coordinator._discovered_pools:
+                _LOGGER.info(
+                    "Drive discovery successful: %d drives, %d pools found",
+                    len(coordinator._discovered_bays),
+                    len(coordinator._discovered_pools),
+                )
+                break
+
+            if attempt < max_retries - 1:
+                _LOGGER.debug(
+                    "No drives found yet, will retry in %d seconds", retry_delay
+                )
+        else:
+            _LOGGER.warning(
+                "Drive discovery completed after %d attempts, "
+                "found %d drives and %d pools. "
+                "Check that UNAS monitor service is running and publishing to MQTT.",
+                max_retries,
+                len(coordinator._discovered_bays),
+                len(coordinator._discovered_pools),
+            )
 
     hass.async_create_task(discover_drives())
 

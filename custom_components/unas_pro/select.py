@@ -111,7 +111,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
             else:
                 # Default to UNAS Managed if unknown
                 self._current_option = MODE_UNAS_MANAGED
-                self.hass.async_create_task(self._ensure_service_running())
+                self.hass.async_create_task(self._ensure_service_stopped())
 
             if old_option != self._current_option:
                 self.async_write_ha_state()
