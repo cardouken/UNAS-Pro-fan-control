@@ -43,7 +43,7 @@ SERVICE_INTERVAL=1        # how often to check temperatures (seconds)
 MQTT_HOST="192.168.1.111"
 MQTT_USER="homeassistant"
 MQTT_PASS="unas_password_123"
-MODE_FILE="/tmp/fan_mode"
+MODE_FILE="/root/fan_mode"  # Persistent storage (survives reboots)
 
 # HDD devices
 hdd_devices=(sda sdb sdc sdd sde sdf)

@@ -1,6 +1,6 @@
 [project]
 name = "unas-pro-fan-control"
-version = "0.1.6"
+version = "0.1.7-develop"
 description = "Add your description here"
 requires-python = ">=3.14"
 dependencies = [

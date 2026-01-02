@@ -186,10 +186,9 @@ class SSHManager:
             await self.execute_command("systemctl enable fan_control")
             await self.execute_command("systemctl restart fan_control")
 
-            # set fan mode to UNAS Managed by default on first install (if mode file doesn't exist)
-            await self.execute_command(
-                "if [ ! -f /tmp/fan_mode ]; then echo 'unas_managed' > /tmp/fan_mode; fi"
-            )
+            # Note: Fan mode is managed via MQTT retained messages
+            # The select entity will initialize mode on first run
+            # Do NOT set a default here to avoid overwriting user settings
 
             _LOGGER.info("Scripts deployed and services started successfully")
 

@@ -235,8 +235,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
             await ssh_manager.execute_command("rm -f /root/fan_control.sh")
 
-            # Remove state files
-            await ssh_manager.execute_command("rm -f /tmp/fan_mode")
+            # Remove state files (fan mode is persistent in /root now)
+            await ssh_manager.execute_command("rm -f /root/fan_mode")
 
             # Reload systemd
             await ssh_manager.execute_command("systemctl daemon-reload")

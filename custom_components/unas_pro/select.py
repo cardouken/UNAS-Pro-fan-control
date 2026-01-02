@@ -58,14 +58,53 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
 
-        # Read current mode from UNAS and sync to MQTT
-        try:
-            stdout, _ = await self.coordinator.ssh_manager.execute_command(
-                "cat /tmp/fan_mode 2>/dev/null || echo 'unas_managed'"
-            )
-            current_mode = stdout.strip()
+        # MQTT retained message is source of truth for fan mode
+        # Migration path: /tmp/fan_mode (old) -> /root/fan_mode (new persistent)
+        current_mode = None
+        mode_source = "default"
 
-            # Publish to MQTT as retained
+        try:
+            # Check new persistent location first
+            stdout, _ = await self.coordinator.ssh_manager.execute_command(
+                "cat /root/fan_mode 2>/dev/null || echo ''"
+            )
+            file_mode = stdout.strip()
+
+            if file_mode:
+                current_mode = file_mode
+                mode_source = "persistent_file"
+                _LOGGER.info("Found fan mode in persistent storage: %s", current_mode)
+            else:
+                # Migration: check old /tmp location
+                stdout, _ = await self.coordinator.ssh_manager.execute_command(
+                    "cat /tmp/fan_mode 2>/dev/null || echo ''"
+                )
+                old_mode = stdout.strip()
+
+                if old_mode:
+                    current_mode = old_mode
+                    mode_source = "migrated_from_tmp"
+                    _LOGGER.info(
+                        "Migrating fan mode from /tmp to /root: %s", current_mode
+                    )
+
+                    # Write to new persistent location
+                    await self.coordinator.ssh_manager.execute_command(
+                        f"echo '{current_mode}' > /root/fan_mode"
+                    )
+
+            # Default to UNAS Managed if no mode found anywhere
+            if not current_mode:
+                current_mode = MQTT_MODE_UNAS_MANAGED
+                mode_source = "default"
+                _LOGGER.info("No existing mode found, defaulting to UNAS Managed")
+
+                # Write default to persistent location
+                await self.coordinator.ssh_manager.execute_command(
+                    f"echo '{current_mode}' > /root/fan_mode"
+                )
+
+            # Always publish to MQTT to ensure retained message exists
             await mqtt.async_publish(
                 self.hass,
                 "homeassistant/unas/fan_mode",
@@ -85,10 +124,13 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
                 self._current_option = MODE_UNAS_MANAGED
 
             _LOGGER.info(
-                "Synced fan mode from UNAS: %s (%s)", current_mode, self._current_option
+                "Fan mode initialized: %s from %s (display: %s)",
+                current_mode,
+                mode_source,
+                self._current_option,
             )
         except Exception as err:
-            _LOGGER.error("Failed to sync mode from UNAS: %s", err)
+            _LOGGER.error("Failed to initialize fan mode: %s", err)
             self._current_option = MODE_UNAS_MANAGED  # Default
 
         @callback
