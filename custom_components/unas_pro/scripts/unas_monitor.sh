@@ -84,25 +84,25 @@ publish_mqtt_sensor() {
 # Function to read system info (uptime, versions, cpu, memory)
 read_system_info() {
     local uptime_seconds unifi_os_version unifi_drive_version
-    local cpu_usage mem_total mem_used mem_percent
-    
+    local cpu_usage mem_total mem_used mem_percent mem_avail
+
     # Get uptime in seconds
     uptime_seconds=$(awk '{print int($1)}' /proc/uptime)
-    
+
     # Get UniFi OS version (from unifi-core package)
     unifi_os_version=$(dpkg -l | awk '/unifi-core/ {print $3}')
-    
+
     # Get UniFi Drive version
     unifi_drive_version=$(dpkg -l | awk '/^ii  unifi-drive / {print $3}')
-    
+
     # Get CPU usage (100 - idle%)
     cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8}' | awk -F. '{print $1}')
-    
-    # Get memory usage
-    mem_total=$(free -m | awk '/^Mem:/ {print $2}')
-    mem_used=$(free -m | awk '/^Mem:/ {print $3}')
+
+    # Get memory usage (using available column for accuracy)
+    read -r mem_total mem_avail < <(free -m | awk '/^Mem:/ {print $2, $7}')
+    mem_used=$((mem_total - mem_avail))
     mem_percent=$(awk "BEGIN {printf \"%.1f\", ($mem_used / $mem_total) * 100}")
-    
+
     # Publish system info under main UNAS device
     publish_mqtt_sensor "unas_uptime" "System Uptime" "$uptime_seconds" "s" "duration" "$UNAS_DEVICE"
     publish_mqtt_sensor "unas_os_version" "UniFi OS Version" "$unifi_os_version" "" "" "$UNAS_DEVICE"
