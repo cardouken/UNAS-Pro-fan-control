@@ -1,8 +1,10 @@
 [project]
 name = "unas-pro-fan-control"
-version = "0.1.7-develop"
+version = "0.1.6-dev"
 description = "Add your description here"
 requires-python = ">=3.14"
 dependencies = [
+    "aiofiles>=25.1.0",
+    "asyncssh>=2.22.0",
     "homeassistant>=2025.12.5",
 ]

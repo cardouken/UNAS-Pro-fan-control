@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import aiofiles
 import asyncssh
 
 _LOGGER = logging.getLogger(__name__)
@@ -86,10 +87,14 @@ class SSHManager:
         _LOGGER.info("Deploying scripts to UNAS...")
 
         try:
-            monitor_script = (SCRIPTS_DIR / "unas_monitor.sh").read_text()
-            monitor_service = (SCRIPTS_DIR / "unas_monitor.service").read_text()
-            fan_control_script = (SCRIPTS_DIR / "fan_control.sh").read_text()
-            fan_control_service = (SCRIPTS_DIR / "fan_control.service").read_text()
+            async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.sh", "r") as f:
+                monitor_script = await f.read()
+            async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.service", "r") as f:
+                monitor_service = await f.read()
+            async with aiofiles.open(SCRIPTS_DIR / "fan_control.sh", "r") as f:
+                fan_control_script = await f.read()
+            async with aiofiles.open(SCRIPTS_DIR / "fan_control.service", "r") as f:
+                fan_control_service = await f.read()
 
             # Replace MQTT placeholders with actual credentials
             if self.mqtt_host and self.mqtt_user and self.mqtt_password:
