@@ -136,7 +136,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
         @callback
         def message_received(msg):
             payload = msg.payload
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "FAN MODE SELECT RECEIVED MQTT: topic=%s payload=%s", msg.topic, payload
             )
 
@@ -157,8 +157,8 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
 
             if old_option != self._current_option:
                 self.async_write_ha_state()
-                _LOGGER.warning(
-                    "Fan mode CHANGED from MQTT: old=%s new=%s (payload: %s)",
+                _LOGGER.info(
+                    "Fan mode changed via MQTT: %s -> %s (payload: %s)",
                     old_option,
                     self._current_option,
                     payload,
