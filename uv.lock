@@ -2110,7 +2110,7 @@ wheels = [
 ]
 
 [[package]]
-name = "unas-pro-fan-control"
+name = "homeassistant-unas-pro"
 version = "0.1.8.dev0"
 source = { virtual = "." }
 dependencies = [
