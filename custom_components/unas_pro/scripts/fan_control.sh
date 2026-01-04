@@ -13,9 +13,9 @@ set -euo pipefail
 # Between: Linear scaling
 
 # Default values (will be overridden by MQTT if available)
-DEFAULT_MIN_TEMP=43       # Temperature (°C) where fans start ramping up from baseline
-DEFAULT_MAX_TEMP=47       # Temperature (°C) where fans reach maximum speed
-DEFAULT_MIN_FAN=204       # Baseline PWM (204 = 80%)
+DEFAULT_MIN_TEMP=40       # Temperature (°C) where fans start ramping up from baseline
+DEFAULT_MAX_TEMP=50       # Temperature (°C) where fans reach maximum speed
+DEFAULT_MIN_FAN=64       # Baseline PWM (64 = 25%)
 DEFAULT_MAX_FAN=255       # Maximum PWM (255 = 100%)
 
 # Current values (loaded from MQTT)
