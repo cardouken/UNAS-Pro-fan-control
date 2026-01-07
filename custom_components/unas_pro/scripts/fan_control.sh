@@ -43,7 +43,6 @@ SERVICE_INTERVAL=1        # how often to check temperatures (seconds)
 MQTT_HOST="192.168.1.111"
 MQTT_USER="homeassistant"
 MQTT_PASS="unas_password_123"
-MODE_FILE="/root/fan_mode"  # Persistent storage (survives reboots)
 
 # HDD devices
 hdd_devices=(sda sdb sdc sdd sde sdf sdg)
@@ -80,26 +79,19 @@ load_fan_curve() {
     if [[ "$max_fan" =~ ^[0-9]+$ ]]; then MAX_FAN=$max_fan; fi
 }
 
-# Check for MQTT mode
-check_mqtt_mode() {
-    # Subscribe to mode topic and write to file (timeout after 0.5s)
-    timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/unas/fan_mode" -C 1 2>/dev/null > "$MODE_FILE" || true
-}
-
+# get current mode from MQTT retained message
 get_mode_value() {
-    if [ -f "$MODE_FILE" ]; then
-        local mode_val=$(cat "$MODE_FILE" 2>/dev/null || echo "")
-        # Check if it's "unas_managed", "auto" or a valid number 0-MAX_FAN
-        if [ "$mode_val" = "unas_managed" ]; then
-            echo "unas_managed"
-        elif [ "$mode_val" = "auto" ]; then
-            echo "auto"
-        elif [[ "$mode_val" =~ ^[0-9]+$ ]] && [ "$mode_val" -ge 0 ] && [ "$mode_val" -le "$MAX_FAN" ]; then
-            echo "$mode_val"
-        else
-            echo "auto"
-        fi
+    # subscribe to mode topic (retained message, timeout after 0.5s)
+    local mode_val=$(timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+        -t "homeassistant/unas/fan_mode" -C 1 2>/dev/null || echo "auto")
+
+    # Check if it's "unas_managed", "auto" or a valid number 0-MAX_FAN
+    if [ "$mode_val" = "unas_managed" ]; then
+        echo "unas_managed"
+    elif [ "$mode_val" = "auto" ]; then
+        echo "auto"
+    elif [[ "$mode_val" =~ ^[0-9]+$ ]] && [ "$mode_val" -ge 0 ] && [ "$mode_val" -le "$MAX_FAN" ]; then
+        echo "$mode_val"
     else
         echo "auto"
     fi
@@ -140,8 +132,7 @@ set_fan_speed() {
     # Load fan curve configuration from MQTT (only in auto mode)
     load_fan_curve
 
-    # Check for mode every iteration
-    check_mqtt_mode
+    # Get current mode from MQTT retained message
     local mode=$(get_mode_value)
 
     if [ "$mode" = "unas_managed" ]; then

@@ -1,6 +1,6 @@
 [project]
 name = "homeassistant-unas-pro"
-version = "0.1.8-dev"
+version = "0.1.9-dev"
 description = "Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integration."
 requires-python = ">=3.14"
 dependencies = [
