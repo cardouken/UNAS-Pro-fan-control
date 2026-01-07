@@ -8,7 +8,19 @@
           "host": "Host (UNAS IP Address)",
           "username": "UNAS SSH username (root by default)",
           "password": "UNAS SSH password",
-          "mqtt_host": "MQTT Broker Host",
+          "mqtt_host": "MQTT Broker Host (without port)",
+          "mqtt_user": "MQTT Username",
+          "mqtt_password": "MQTT Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure UNAS Pro",
+        "description": "Update your UNAS Pro connection settings. The integration will reconnect and redeploy scripts with the new configuration.",
+        "data": {
+          "host": "Host (UNAS IP Address)",
+          "username": "UNAS SSH username (root by default)",
+          "password": "UNAS SSH password",
+          "mqtt_host": "MQTT Broker Host (without port)",
           "mqtt_user": "MQTT Username",
           "mqtt_password": "MQTT Password"
         }
@@ -21,7 +33,8 @@
     },
     "abort": {
       "already_configured": "This UNAS Pro is already configured.",
-      "mqtt_required": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first, then try again."
+      "mqtt_required": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first, then try again.",
+      "reconfigure_successful": "Configuration updated successfully. The integration is reconnecting with the new settings."
     }
   },
   "issues": {
