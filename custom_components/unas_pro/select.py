@@ -6,6 +6,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from homeassistant.components import mqtt
@@ -35,7 +36,7 @@ async def async_setup_entry(
     async_add_entities([UNASFanModeSelect(coordinator, hass)])
 
 
-class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
+class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
     def __init__(
         self, coordinator: UNASDataUpdateCoordinator, hass: HomeAssistant
     ) -> None:
@@ -58,80 +59,87 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
 
-        # MQTT retained message is source of truth for fan mode
-        # Migration path: /tmp/fan_mode (old) -> /root/fan_mode (new persistent)
-        current_mode = None
-        mode_source = "default"
+        # restore last known state first (survives reloads)
+        if (last_state := await self.async_get_last_state()) is not None:
+            self._current_option = last_state.state
+            _LOGGER.info("Restored fan mode from HA state: %s", self._current_option)
+        else:
+            # no HA state exists - initialize from file
+            # MQTT retained message is source of truth for fan mode
+            current_mode = None
+            mode_source = "default"
 
-        try:
-            # Check new persistent location first
-            stdout, _ = await self.coordinator.ssh_manager.execute_command(
-                "cat /root/fan_mode 2>/dev/null || echo ''"
-            )
-            file_mode = stdout.strip()
-
-            if file_mode:
-                current_mode = file_mode
-                mode_source = "persistent_file"
-                _LOGGER.info("Found fan mode in persistent storage: %s", current_mode)
-            else:
-                # Migration: check old /tmp location
+            try:
+                # check new persistent location first
                 stdout, _ = await self.coordinator.ssh_manager.execute_command(
-                    "cat /tmp/fan_mode 2>/dev/null || echo ''"
+                    "cat /root/fan_mode 2>/dev/null || echo ''"
                 )
-                old_mode = stdout.strip()
+                file_mode = stdout.strip()
 
-                if old_mode:
-                    current_mode = old_mode
-                    mode_source = "migrated_from_tmp"
+                if file_mode:
+                    current_mode = file_mode
+                    mode_source = "persistent_file"
                     _LOGGER.info(
-                        "Migrating fan mode from /tmp to /root: %s", current_mode
+                        "Found fan mode in persistent storage: %s", current_mode
                     )
+                else:
+                    # TODO: migration, check old /tmp location - can remove at some point
+                    stdout, _ = await self.coordinator.ssh_manager.execute_command(
+                        "cat /tmp/fan_mode 2>/dev/null || echo ''"
+                    )
+                    old_mode = stdout.strip()
 
-                    # Write to new persistent location
+                    if old_mode:
+                        current_mode = old_mode
+                        mode_source = "migrated_from_tmp"
+                        _LOGGER.info(
+                            "Migrating fan mode from /tmp to /root: %s", current_mode
+                        )
+
+                        # write to new persistent location
+                        await self.coordinator.ssh_manager.execute_command(
+                            f"echo '{current_mode}' > /root/fan_mode"
+                        )
+
+                # default to UNAS Managed if no mode found anywhere
+                if not current_mode:
+                    current_mode = MQTT_MODE_UNAS_MANAGED
+                    mode_source = "default"
+                    _LOGGER.info("No existing mode found, defaulting to UNAS Managed")
+
+                    # Write default to persistent location
                     await self.coordinator.ssh_manager.execute_command(
                         f"echo '{current_mode}' > /root/fan_mode"
                     )
 
-            # Default to UNAS Managed if no mode found anywhere
-            if not current_mode:
-                current_mode = MQTT_MODE_UNAS_MANAGED
-                mode_source = "default"
-                _LOGGER.info("No existing mode found, defaulting to UNAS Managed")
-
-                # Write default to persistent location
-                await self.coordinator.ssh_manager.execute_command(
-                    f"echo '{current_mode}' > /root/fan_mode"
+                # always publish to MQTT to ensure retained message exists
+                await mqtt.async_publish(
+                    self.hass,
+                    "homeassistant/unas/fan_mode",
+                    current_mode,
+                    qos=0,
+                    retain=True,
                 )
 
-            # Always publish to MQTT to ensure retained message exists
-            await mqtt.async_publish(
-                self.hass,
-                "homeassistant/unas/fan_mode",
-                current_mode,
-                qos=0,
-                retain=True,
-            )
+                # set initial state
+                if current_mode == MQTT_MODE_UNAS_MANAGED:
+                    self._current_option = MODE_UNAS_MANAGED
+                elif current_mode == MQTT_MODE_CUSTOM_CURVE:
+                    self._current_option = MODE_CUSTOM_CURVE
+                elif current_mode.isdigit():
+                    self._current_option = MODE_SET_SPEED
+                else:
+                    self._current_option = MODE_UNAS_MANAGED
 
-            # Set initial state
-            if current_mode == MQTT_MODE_UNAS_MANAGED:
+                _LOGGER.info(
+                    "Fan mode initialized: %s from %s (display: %s)",
+                    current_mode,
+                    mode_source,
+                    self._current_option,
+                )
+            except Exception as err:
+                _LOGGER.error("Failed to initialize fan mode: %s", err)
                 self._current_option = MODE_UNAS_MANAGED
-            elif current_mode == MQTT_MODE_CUSTOM_CURVE:
-                self._current_option = MODE_CUSTOM_CURVE
-            elif current_mode.isdigit():
-                self._current_option = MODE_SET_SPEED
-            else:
-                self._current_option = MODE_UNAS_MANAGED
-
-            _LOGGER.info(
-                "Fan mode initialized: %s from %s (display: %s)",
-                current_mode,
-                mode_source,
-                self._current_option,
-            )
-        except Exception as err:
-            _LOGGER.error("Failed to initialize fan mode: %s", err)
-            self._current_option = MODE_UNAS_MANAGED  # Default
 
         @callback
         def message_received(msg):

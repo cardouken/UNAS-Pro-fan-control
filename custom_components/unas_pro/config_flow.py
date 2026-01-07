@@ -85,13 +85,16 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_HOST, default=entry.data.get(CONF_HOST)): str,
                 vol.Optional(
-                    CONF_USERNAME, default=entry.data.get(CONF_USERNAME, DEFAULT_USERNAME)
+                    CONF_USERNAME,
+                    default=entry.data.get(CONF_USERNAME, DEFAULT_USERNAME),
                 ): str,
                 vol.Required(CONF_PASSWORD, default=entry.data.get(CONF_PASSWORD)): str,
                 vol.Required(
                     CONF_MQTT_HOST,
                     default=entry.data.get(CONF_MQTT_HOST),
-                    description={"suggested_value": "192.168.1.111 or homeassistant.local"},
+                    description={
+                        "suggested_value": "192.168.1.111 or homeassistant.local"
+                    },
                 ): str,
                 vol.Required(
                     CONF_MQTT_USER, default=entry.data.get(CONF_MQTT_USER)
