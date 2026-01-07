@@ -179,4 +179,3 @@ MIT - See [LICENSE.md](LICENSE.md)
 ## Support
 
 - [GitHub Issues](https://github.com/cardouken/homeassistant-unas-pro/issues)
-- [GitHub Discussions](https://github.com/cardouken/homeassistant-unas-pro/discussions)
