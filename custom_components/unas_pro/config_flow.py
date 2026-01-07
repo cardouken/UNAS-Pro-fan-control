@@ -47,40 +47,21 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
         if user_input is not None:
-            # clean up MQTT host - strip port if user accidentally included it
-            mqtt_host = user_input[CONF_MQTT_HOST]
-            if ":" in mqtt_host:
-                mqtt_host = mqtt_host.split(":")[0]
-                _LOGGER.info(
-                    "Stripped port from MQTT host: %s -> %s",
-                    user_input[CONF_MQTT_HOST],
-                    mqtt_host,
-                )
-                user_input[CONF_MQTT_HOST] = mqtt_host
+            user_input[CONF_MQTT_HOST] = self._clean_mqtt_host(user_input[CONF_MQTT_HOST])
 
-            # test SSH connection with new credentials
-            try:
-                await self._test_connection(
-                    user_input[CONF_HOST],
-                    user_input[CONF_USERNAME],
-                    user_input[CONF_PASSWORD],
-                )
-            except asyncssh.Error as err:
-                _LOGGER.error("SSH connection failed: %s", err)
-                errors["base"] = "cannot_connect"
-            except asyncio.TimeoutError:
-                _LOGGER.error("SSH connection timed out")
-                errors["base"] = "timeout_connect"
-            except Exception as err:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception: %s", err)
-                errors["base"] = "unknown"
+            error_key = await self._validate_connection(
+                user_input[CONF_HOST],
+                user_input[CONF_USERNAME],
+                user_input[CONF_PASSWORD],
+            )
+
+            if error_key:
+                errors["base"] = error_key
             else:
-                # update the config entry with new data
                 self.hass.config_entries.async_update_entry(entry, data=user_input)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
 
-        # pre-fill form with current values
         reconfigure_schema = vol.Schema(
             {
                 vol.Required(CONF_HOST, default=entry.data.get(CONF_HOST)): str,
@@ -89,16 +70,8 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     default=entry.data.get(CONF_USERNAME, DEFAULT_USERNAME),
                 ): str,
                 vol.Required(CONF_PASSWORD, default=entry.data.get(CONF_PASSWORD)): str,
-                vol.Required(
-                    CONF_MQTT_HOST,
-                    default=entry.data.get(CONF_MQTT_HOST),
-                    description={
-                        "suggested_value": "192.168.1.111 or homeassistant.local"
-                    },
-                ): str,
-                vol.Required(
-                    CONF_MQTT_USER, default=entry.data.get(CONF_MQTT_USER)
-                ): str,
+                vol.Required(CONF_MQTT_HOST, default=entry.data.get(CONF_MQTT_HOST)): str,
+                vol.Required(CONF_MQTT_USER, default=entry.data.get(CONF_MQTT_USER)): str,
                 vol.Required(
                     CONF_MQTT_PASSWORD, default=entry.data.get(CONF_MQTT_PASSWORD)
                 ): str,
@@ -119,46 +92,22 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         errors: dict[str, str] = {}
 
-        # check if MQTT integration is loaded
         if mqtt.DOMAIN not in self.hass.data:
-            return self.async_abort(
-                reason="mqtt_required",
-                description_placeholders={
-                    "error": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first."
-                },
-            )
+            return self.async_abort(reason="mqtt_required")
+
 
         if user_input is not None:
-            # clean up MQTT host - strip port if user accidentally included it
-            mqtt_host = user_input[CONF_MQTT_HOST]
-            if ":" in mqtt_host:
-                # remove port (mosquitto_pub uses -h for hostname only, port defaults to 1883)
-                mqtt_host = mqtt_host.split(":")[0]
-                _LOGGER.info(
-                    "Stripped port from MQTT host: %s -> %s",
-                    user_input[CONF_MQTT_HOST],
-                    mqtt_host,
-                )
-                user_input[CONF_MQTT_HOST] = mqtt_host
+            user_input[CONF_MQTT_HOST] = self._clean_mqtt_host(user_input[CONF_MQTT_HOST])
 
-            # Test SSH connection
-            try:
-                await self._test_connection(
-                    user_input[CONF_HOST],
-                    user_input[CONF_USERNAME],
-                    user_input[CONF_PASSWORD],
-                )
-            except asyncssh.Error as err:
-                _LOGGER.error("SSH connection failed: %s", err)
-                errors["base"] = "cannot_connect"
-            except asyncio.TimeoutError:
-                _LOGGER.error("SSH connection timed out")
-                errors["base"] = "timeout_connect"
-            except Exception as err:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception: %s", err)
-                errors["base"] = "unknown"
+            error_key = await self._validate_connection(
+                user_input[CONF_HOST],
+                user_input[CONF_USERNAME],
+                user_input[CONF_PASSWORD],
+            )
+
+            if error_key:
+                errors["base"] = error_key
             else:
-                # set unique ID based on host
                 await self.async_set_unique_id(user_input[CONF_HOST])
                 self._abort_if_unique_id_configured()
 
@@ -173,6 +122,29 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    def _clean_mqtt_host(self, mqtt_host: str) -> str:
+        if ":" in mqtt_host:
+            cleaned = mqtt_host.split(":")[0]
+            _LOGGER.debug("Stripped port from MQTT host: %s -> %s", mqtt_host, cleaned)
+            return cleaned
+        return mqtt_host
+
+    async def _validate_connection(
+        self, host: str, username: str, password: str
+    ) -> str | None:
+        try:
+            await self._test_connection(host, username, password)
+            return None
+        except asyncssh.Error as err:
+            _LOGGER.error("SSH connection failed: %s", err)
+            return "cannot_connect"
+        except asyncio.TimeoutError:
+            _LOGGER.error("SSH connection timed out")
+            return "timeout_connect"
+        except Exception as err:
+            _LOGGER.exception("Unexpected error during connection test: %s", err)
+            return "unknown"
+
     async def _test_connection(self, host: str, username: str, password: str) -> None:
         conn = None
         try:
@@ -185,12 +157,11 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 timeout=10.0,
             )
-            # test a simple command
             result = await conn.run("echo 'test'", check=True)
             if result.stdout.strip() != "test":
                 raise Exception("Command execution test failed")
-
         finally:
             if conn:
                 conn.close()
                 await conn.wait_closed()
+

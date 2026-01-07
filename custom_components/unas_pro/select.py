@@ -59,27 +59,12 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
 
-        # restore last known state first (survives HA reloads)
         if (last_state := await self.async_get_last_state()) is not None:
             self._current_option = last_state.state
-            _LOGGER.info("Restored fan mode from HA state: %s", self._current_option)
+            _LOGGER.debug("Restored fan mode: %s", self._current_option)
         else:
-            # no HA state exists - default to UNAS Managed and publish to MQTT
-            _LOGGER.info("No previous state found, defaulting to UNAS Managed mode")
             self._current_option = MODE_UNAS_MANAGED
-
-            try:
-                # publish default mode to MQTT with retain=True
-                await mqtt.async_publish(
-                    self.hass,
-                    "homeassistant/unas/fan_mode",
-                    MQTT_MODE_UNAS_MANAGED,
-                    qos=0,
-                    retain=True,
-                )
-                _LOGGER.info("Published default fan mode to MQTT: %s", MQTT_MODE_UNAS_MANAGED)
-            except Exception as err:
-                _LOGGER.error("Failed to publish default fan mode to MQTT: %s", err)
+            await self._publish_mode_to_mqtt(MQTT_MODE_UNAS_MANAGED)
 
         @callback
         def message_received(msg):
@@ -89,6 +74,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
             )
 
             old_option = self._current_option
+
             if payload == MQTT_MODE_UNAS_MANAGED:
                 self._current_option = MODE_UNAS_MANAGED
                 self.hass.async_create_task(self._ensure_service_stopped())
@@ -99,59 +85,43 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
                 self._current_option = MODE_SET_SPEED
                 self.hass.async_create_task(self._ensure_service_running())
             else:
-                # Default to UNAS Managed if unknown
                 self._current_option = MODE_UNAS_MANAGED
                 self.hass.async_create_task(self._ensure_service_stopped())
 
             if old_option != self._current_option:
                 self.async_write_ha_state()
-                _LOGGER.info(
-                    "Fan mode changed via MQTT: %s -> %s (payload: %s)",
-                    old_option,
-                    self._current_option,
-                    payload,
-                )
-            else:
-                _LOGGER.info(
-                    "Fan mode unchanged: %s (payload: %s)",
-                    self._current_option,
-                    payload,
-                )
+                _LOGGER.info("Fan mode changed: %s -> %s", old_option, self._current_option)
 
-        # subscribe to MQTT topic - this will immediately receive the retained message if it exists
         self._unsubscribe = await mqtt.async_subscribe(
             self.hass,
             "homeassistant/unas/fan_mode",
             message_received,
             qos=0,
         )
-        _LOGGER.info(
-            "Fan mode select subscribed to MQTT - will sync from retained message if present"
-        )
+
+    async def _publish_mode_to_mqtt(self, mode: str) -> None:
+        try:
+            await mqtt.async_publish(
+                self.hass,
+                "homeassistant/unas/fan_mode",
+                mode,
+                qos=0,
+                retain=True,
+            )
+        except Exception as err:
+            _LOGGER.error("Failed to publish fan mode to MQTT: %s", err)
 
     async def _ensure_service_running(self) -> None:
         try:
-            service_running = await self.coordinator.ssh_manager.service_running(
-                "fan_control"
-            )
-            if not service_running:
-                _LOGGER.info("Starting fan_control service to match mode")
-                await self.coordinator.ssh_manager.execute_command(
-                    "systemctl start fan_control"
-                )
+            if not await self.coordinator.ssh_manager.service_running("fan_control"):
+                await self.coordinator.ssh_manager.execute_command("systemctl start fan_control")
         except Exception as err:
             _LOGGER.error("Failed to start fan_control service: %s", err)
 
     async def _ensure_service_stopped(self) -> None:
         try:
-            service_running = await self.coordinator.ssh_manager.service_running(
-                "fan_control"
-            )
-            if service_running:
-                _LOGGER.info("Stopping fan_control service to match UNAS Managed mode")
-                await self.coordinator.ssh_manager.execute_command(
-                    "systemctl stop fan_control"
-                )
+            if await self.coordinator.ssh_manager.service_running("fan_control"):
+                await self.coordinator.ssh_manager.execute_command("systemctl stop fan_control")
         except Exception as err:
             _LOGGER.error("Failed to stop fan_control service: %s", err)
 
@@ -169,67 +139,23 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
         return self._current_option is not None
 
     async def async_select_option(self, option: str) -> None:
-        _LOGGER.info("Changing fan mode to: %s", option)
-
         try:
             if option == MODE_UNAS_MANAGED:
-                # stop the fan_control service to let UNAS firmware manage fans
-                _LOGGER.info("Stopping fan_control service for UNAS Managed mode")
-                await self.coordinator.ssh_manager.execute_command(
-                    "systemctl stop fan_control"
-                )
-
-                await mqtt.async_publish(
-                    self.hass,
-                    "homeassistant/unas/fan_mode",
-                    MQTT_MODE_UNAS_MANAGED,
-                    qos=0,
-                    retain=True,
-                )
-                _LOGGER.info("Fan mode set to UNAS Managed - service stopped")
+                await self.coordinator.ssh_manager.execute_command("systemctl stop fan_control")
+                await self._publish_mode_to_mqtt(MQTT_MODE_UNAS_MANAGED)
 
             elif option == MODE_CUSTOM_CURVE:
-                service_running = await self.coordinator.ssh_manager.service_running(
-                    "fan_control"
-                )
-                if not service_running:
-                    _LOGGER.info("Starting fan_control service for Custom Curve mode")
-                    await self.coordinator.ssh_manager.execute_command(
-                        "systemctl start fan_control"
-                    )
-
-                await mqtt.async_publish(
-                    self.hass,
-                    "homeassistant/unas/fan_mode",
-                    MQTT_MODE_CUSTOM_CURVE,
-                    qos=0,
-                    retain=True,
-                )
-                _LOGGER.info("Fan mode set to Custom Curve")
+                if not await self.coordinator.ssh_manager.service_running("fan_control"):
+                    await self.coordinator.ssh_manager.execute_command("systemctl start fan_control")
+                await self._publish_mode_to_mqtt(MQTT_MODE_CUSTOM_CURVE)
 
             elif option == MODE_SET_SPEED:
-                service_running = await self.coordinator.ssh_manager.service_running(
-                    "fan_control"
-                )
-                if not service_running:
-                    _LOGGER.info("Starting fan_control service for Set Speed mode")
-                    await self.coordinator.ssh_manager.execute_command(
-                        "systemctl start fan_control"
-                    )
+                if not await self.coordinator.ssh_manager.service_running("fan_control"):
+                    await self.coordinator.ssh_manager.execute_command("systemctl start fan_control")
 
                 mqtt_data = self.coordinator.mqtt_client.get_data()
-                current_speed = mqtt_data.get("unas_fan_speed", 204)  # Default to 80%
-
-                await mqtt.async_publish(
-                    self.hass,
-                    "homeassistant/unas/fan_mode",
-                    str(current_speed),
-                    qos=0,
-                    retain=True,
-                )
-                _LOGGER.info(
-                    "Fan mode set to Set Speed (locked to %s PWM)", current_speed
-                )
+                current_speed = mqtt_data.get("unas_fan_speed", 204)
+                await self._publish_mode_to_mqtt(str(current_speed))
 
             self._current_option = option
             self.async_write_ha_state()

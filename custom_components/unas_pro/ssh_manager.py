@@ -9,8 +9,14 @@ import asyncssh
 
 _LOGGER = logging.getLogger(__name__)
 
-# script files are bundled with the integration
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
+
+# Default values used in script templates
+_DEFAULTS = {
+    "MQTT_HOST": "192.168.1.111",
+    "MQTT_USER": "homeassistant",
+    "MQTT_PASS": "unas_password_123",
+}
 
 
 class SSHManager:
@@ -81,9 +87,31 @@ class SSHManager:
         )
         return stdout.strip() == "active"
 
+    def _replace_mqtt_credentials(self, script: str) -> str:
+        replacements = {
+            f'MQTT_HOST="{_DEFAULTS["MQTT_HOST"]}"': f'MQTT_HOST="{self.mqtt_host}"',
+            f'MQTT_USER="{_DEFAULTS["MQTT_USER"]}"': f'MQTT_USER="{self.mqtt_user}"',
+            f'MQTT_PASS="{_DEFAULTS["MQTT_PASS"]}"': f'MQTT_PASS="{self.mqtt_password}"',
+        }
+
+        for old, new in replacements.items():
+            script = script.replace(old, new)
+
+        return script
+
+    def _validate_replacements(self, script: str, script_name: str) -> None:
+        checks = [
+            (self.mqtt_host, "MQTT_HOST", _DEFAULTS["MQTT_HOST"]),
+            (self.mqtt_user, "MQTT_USER", _DEFAULTS["MQTT_USER"]),
+            (self.mqtt_password, "MQTT_PASS", _DEFAULTS["MQTT_PASS"]),
+        ]
+
+        for user_value, key, default in checks:
+            if user_value != default and f'{key}="{default}"' in script:
+                raise ValueError(f"Failed to replace {key} in {script_name}")
+
     async def deploy_scripts(self) -> None:
         await self.connect()
-
         _LOGGER.info("Deploying scripts to UNAS...")
 
         try:
@@ -96,69 +124,15 @@ class SSHManager:
             async with aiofiles.open(SCRIPTS_DIR / "fan_control.service", "r") as f:
                 fan_control_service = await f.read()
 
-            # Replace MQTT placeholders with actual credentials
             if self.mqtt_host and self.mqtt_user and self.mqtt_password:
-                monitor_script = monitor_script.replace(
-                    'MQTT_HOST="192.168.1.111"', f'MQTT_HOST="{self.mqtt_host}"'
-                )
-                monitor_script = monitor_script.replace(
-                    'MQTT_USER="homeassistant"', f'MQTT_USER="{self.mqtt_user}"'
-                )
-                monitor_script = monitor_script.replace(
-                    'MQTT_PASS="unas_password_123"', f'MQTT_PASS="{self.mqtt_password}"'
-                )
+                monitor_script = self._replace_mqtt_credentials(monitor_script)
+                fan_control_script = self._replace_mqtt_credentials(fan_control_script)
 
-                fan_control_script = fan_control_script.replace(
-                    'MQTT_HOST="192.168.1.111"', f'MQTT_HOST="{self.mqtt_host}"'
-                )
-                fan_control_script = fan_control_script.replace(
-                    'MQTT_USER="homeassistant"', f'MQTT_USER="{self.mqtt_user}"'
-                )
-                fan_control_script = fan_control_script.replace(
-                    'MQTT_PASS="unas_password_123"', f'MQTT_PASS="{self.mqtt_password}"'
-                )
+                self._validate_replacements(monitor_script, "monitor script")
+                self._validate_replacements(fan_control_script, "fan control script")
 
-                # Validate that credentials were actually replaced (unless they match defaults)
-                # Only validate if the user credentials differ from defaults
-                if (
-                    self.mqtt_host != "192.168.1.111"
-                    and 'MQTT_HOST="192.168.1.111"' in monitor_script
-                ):
-                    raise ValueError("Failed to replace MQTT_HOST in monitor script")
-                if (
-                    self.mqtt_user != "homeassistant"
-                    and 'MQTT_USER="homeassistant"' in monitor_script
-                ):
-                    raise ValueError("Failed to replace MQTT_USER in monitor script")
-                if (
-                    self.mqtt_password != "unas_password_123"
-                    and 'MQTT_PASS="unas_password_123"' in monitor_script
-                ):
-                    raise ValueError("Failed to replace MQTT_PASS in monitor script")
-                if (
-                    self.mqtt_host != "192.168.1.111"
-                    and 'MQTT_HOST="192.168.1.111"' in fan_control_script
-                ):
-                    raise ValueError(
-                        "Failed to replace MQTT_HOST in fan control script"
-                    )
-                if (
-                    self.mqtt_user != "homeassistant"
-                    and 'MQTT_USER="homeassistant"' in fan_control_script
-                ):
-                    raise ValueError(
-                        "Failed to replace MQTT_USER in fan control script"
-                    )
-                if (
-                    self.mqtt_password != "unas_password_123"
-                    and 'MQTT_PASS="unas_password_123"' in fan_control_script
-                ):
-                    raise ValueError(
-                        "Failed to replace MQTT_PASS in fan control script"
-                    )
-
-                _LOGGER.info(
-                    "MQTT credentials validated in scripts (host=%s, user=%s)",
+                _LOGGER.debug(
+                    "MQTT credentials configured (host=%s, user=%s)",
                     self.mqtt_host,
                     self.mqtt_user,
                 )
@@ -171,7 +145,6 @@ class SSHManager:
                 monitor_service,
                 executable=False,
             )
-
             await self._upload_file(
                 "/root/fan_control.sh", fan_control_script, executable=True
             )
@@ -184,18 +157,13 @@ class SSHManager:
             await self.execute_command(
                 "apt-get update && apt-get install -y mosquitto-clients"
             )
-
             await self.execute_command("systemctl daemon-reload")
             await self.execute_command("systemctl enable unas_monitor")
             await self.execute_command("systemctl restart unas_monitor")
             await self.execute_command("systemctl enable fan_control")
             await self.execute_command("systemctl restart fan_control")
 
-            # Note: Fan mode is managed via MQTT retained messages
-            # The select entity will initialize mode on first run
-            # Do NOT set a default here to avoid overwriting user settings
-
-            _LOGGER.info("Scripts deployed and services started successfully")
+            _LOGGER.info("Scripts deployed and services started")
 
         except Exception as err:
             _LOGGER.error("Failed to deploy scripts: %s", err)
@@ -204,7 +172,6 @@ class SSHManager:
     async def _upload_file(
         self, remote_path: str, content: str, executable: bool = False
     ) -> None:
-        # Create temp file and upload
         async with self._conn.start_sftp_client() as sftp:
             async with sftp.open(remote_path, "w") as remote_file:
                 await remote_file.write(content)
