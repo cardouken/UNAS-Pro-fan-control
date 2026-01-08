@@ -114,8 +114,6 @@ Temperature-based fan curve with configurable parameters:
 - Min Fan Speed: `15%`
 - Max Fan Speed: `30%`
 
-Result: Lower baseline, warmer drives, quieter operation.
-
 **Example: Aggressive**
 
 - Min Temperature: `38°C`
@@ -123,17 +121,9 @@ Result: Lower baseline, warmer drives, quieter operation.
 - Min Fan Speed: `70%`
 - Max Fan Speed: `100%`
 
-Result: Cooler drives, more aggressive cooling.
-
 ### 3. Set Speed
 
 Lock fans to a specific speed (0-100%).
-
-**How to use:**
-
-1. Select "Set Speed" mode
-2. Adjust "UNAS Fan Speed" slider
-3. Fans stay locked at that speed
 
 ## Monitoring
 
