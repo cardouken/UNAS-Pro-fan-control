@@ -95,8 +95,8 @@ The integration will automatically:
 
 ### 1. UNAS Managed
 
-Lets UNAS control the fans automatically based on the selected Fan Mode (default behavior). Disables fan_control.service
-entirely. Useful if you only want to get data from the UNAS and not control it.
+Lets UNAS control the fans automatically based on the selected Fan Mode (default behavior). Useful if you only want to
+get data from the UNAS and not control it.
 
 ### 2. Custom Curve
 
