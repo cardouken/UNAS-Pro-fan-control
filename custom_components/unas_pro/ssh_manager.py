@@ -43,7 +43,16 @@ class SSHManager:
 
     async def connect(self) -> None:
         if self._conn:
-            return
+            try:
+                await self._conn.run("true", timeout=2, check=False)
+                return
+            except Exception:
+                try:
+                    self._conn.close()
+                    await self._conn.wait_closed()
+                except Exception:
+                    pass
+                self._conn = None
 
         try:
             self._conn = await asyncssh.connect(
@@ -71,6 +80,11 @@ class SSHManager:
         try:
             result = await self._conn.run(command, check=False)
             return result.stdout, result.stderr
+        except (asyncssh.ConnectionLost, asyncssh.DisconnectError, BrokenPipeError) as err:
+            # Connection died, properly close and force reconnect on next attempt
+            _LOGGER.warning("SSH connection lost during command '%s': %s", command, err)
+            await self.disconnect()
+            raise
         except Exception as err:
             _LOGGER.error("Failed to execute command '%s': %s", command, err)
             raise

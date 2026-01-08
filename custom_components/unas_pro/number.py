@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from homeassistant.components import mqtt
 
@@ -48,7 +49,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
+class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
     def __init__(
         self, coordinator: UNASDataUpdateCoordinator, hass: HomeAssistant
     ) -> None:
@@ -76,6 +77,13 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+
+        if (last_state := await self.async_get_last_state()) is not None:
+            try:
+                self._current_value = float(last_state.state)
+                _LOGGER.debug("Restored fan speed: %s%%", self._current_value)
+            except (ValueError, TypeError):
+                _LOGGER.warning("Could not restore fan speed from: %s", last_state.state)
 
         @callback
         def speed_message_received(msg):

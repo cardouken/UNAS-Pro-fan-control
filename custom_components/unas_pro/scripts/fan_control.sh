@@ -1,214 +1,180 @@
 #!/bin/bash
-#
-# Fan control service for UNAS Pro with simple linear fan curve, optimized for Noctua NF-A8 PWM.
-# Allows overriding this custom fan curve with a persistent value from HA that can be toggled on or set to auto.
-#
 
 set -euo pipefail
 
-# Fan curve configuration - loaded from MQTT or defaults
-# Linear interpolation between MIN_TEMP and MAX_TEMP
-# Below MIN_TEMP: MIN_FAN speed
-# Above MAX_TEMP: MAX_FAN speed
-# Between: Linear scaling
-
-# Default values (will be overridden by MQTT if available)
-DEFAULT_MIN_TEMP=40       # Temperature (°C) where fans start ramping up from baseline
-DEFAULT_MAX_TEMP=50       # Temperature (°C) where fans reach maximum speed
-DEFAULT_MIN_FAN=64        # Baseline PWM (64 = 25%)
-DEFAULT_MAX_FAN=255       # Maximum PWM (255 = 100%)
-
-# Current values (loaded from MQTT)
-MIN_TEMP=$DEFAULT_MIN_TEMP
-MAX_TEMP=$DEFAULT_MAX_TEMP
-MIN_FAN=$DEFAULT_MIN_FAN
-MAX_FAN=$DEFAULT_MAX_FAN
-
-# Example configurations:
-# Conservative (quieter, warmer drives):
-#   MIN_TEMP=40, MAX_TEMP=50, MIN_FAN=153 (60%), MAX_FAN=255 (100%)
-#   40°C: 60%, 45°C: 80%, 50°C: 100%
-#
-# Balanced (recommended for Noctua NF-A8 PWM fans):
-#   MIN_TEMP=43, MAX_TEMP=47, MIN_FAN=204 (80%), MAX_FAN=255 (100%)
-#   43°C: 80%, 45°C: 90%, 47°C: 100%
-#
-# Aggressive (cooler, louder):
-#   MIN_TEMP=38, MAX_TEMP=45, MIN_FAN=178 (70%), MAX_FAN=255 (100%)
-#   38°C: 70%, 41.5°C: 85%, 45°C: 100%
-
-SERVICE_INTERVAL=1        # how often to check temperatures (seconds)
-
-# MQTT config for mode control
 MQTT_HOST="192.168.1.111"
 MQTT_USER="homeassistant"
 MQTT_PASS="unas_password_123"
 
-# HDD devices
-hdd_devices=(sda sdb sdc sdd sde sdf sdg)
+HDD_DEVICES=(sda sdb sdc sdd sde sdf sdg)
 
-# run as service: loop every N seconds, otherwise run once with logging
-LOGGING=true
+STATE_FILE="/tmp/fan_control_state"
+LAST_PWM_FILE="/tmp/fan_control_last_pwm"
+
+# Default values
+FAN_MODE="unas_managed"
+MIN_TEMP=40
+MAX_TEMP=50
+MIN_FAN=64
+MAX_FAN=255
+
+# Initialize state file with defaults
+{
+    echo "FAN_MODE=$FAN_MODE"
+    echo "MIN_TEMP=$MIN_TEMP"
+    echo "MAX_TEMP=$MAX_TEMP"
+    echo "MIN_FAN=$MIN_FAN"
+    echo "MAX_FAN=$MAX_FAN"
+} > "$STATE_FILE"
+
+echo "0" > "$LAST_PWM_FILE"
+
 SERVICE=false
-if [ "${1:-}" = "--service" ]; then
-    LOGGING=false
-    SERVICE=true
+[ "${1:-}" = "--service" ] && SERVICE=true
+
+update_state_from_mqtt() {
+    local topic=$1 payload=$2
+    local var_name
+    
+    case "${topic##*/}" in
+        fan_mode)
+            var_name="FAN_MODE"
+            ;;
+        min_temp)
+            [[ "$payload" =~ ^[0-9]+$ ]] || return
+            var_name="MIN_TEMP"
+            ;;
+        max_temp)
+            [[ "$payload" =~ ^[0-9]+$ ]] || return
+            var_name="MAX_TEMP"
+            ;;
+        min_fan)
+            [[ "$payload" =~ ^[0-9]+$ ]] || return
+            var_name="MIN_FAN"
+            ;;
+        max_fan)
+            [[ "$payload" =~ ^[0-9]+$ ]] || return
+            var_name="MAX_FAN"
+            ;;
+        *)
+            return
+            ;;
+    esac
+    
+    sed -i "s/^${var_name}=.*/${var_name}=${payload}/" "$STATE_FILE"
+}
+
+# Fetch retained MQTT messages on startup
+# systemd will restart the script after 30s if network/MQTT not ready
+echo "Fetching MQTT state..."
+MQTT_OUTPUT=$(timeout 5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+    -t "homeassistant/unas/fan_mode" \
+    -t "homeassistant/unas/fan_curve/+" \
+    -C 5 \
+    -F "%t %p" 2>/dev/null)
+
+if [ -z "$MQTT_OUTPUT" ]; then
+    echo "ERROR: No MQTT data received, exiting (systemd will restart)"
+    exit 1
 fi
 
-log_echo() {
-    if $LOGGING; then
-        echo "$@"
-    fi
+echo "$MQTT_OUTPUT" | while read -r topic payload; do
+    update_state_from_mqtt "$topic" "$payload"
+done
+
+echo "Fan control initialized with state:"
+cat "$STATE_FILE"
+
+# Start persistent MQTT subscription for updates
+mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+    -t "homeassistant/unas/fan_mode" \
+    -t "homeassistant/unas/fan_curve/+" \
+    -F "%t %p" 2>/dev/null | while read -r topic payload; do
+    update_state_from_mqtt "$topic" "$payload"
+done &
+MQTT_PID=$!
+
+cleanup() {
+    kill "$MQTT_PID" 2>/dev/null || true
 }
+trap cleanup EXIT TERM INT
 
-# Load fan curve configuration from MQTT
-load_fan_curve() {
-    local min_temp=$(timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/unas/fan_curve/min_temp" -C 1 2>/dev/null || true)
-    local max_temp=$(timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/unas/fan_curve/max_temp" -C 1 2>/dev/null || true)
-    local min_fan=$(timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/unas/fan_curve/min_fan" -C 1 2>/dev/null || true)
-    local max_fan=$(timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/unas/fan_curve/max_fan" -C 1 2>/dev/null || true)
-
-    # Update values if they were retrieved successfully (otherwise keep defaults)
-    if [[ "$min_temp" =~ ^[0-9]+$ ]]; then MIN_TEMP=$min_temp; fi
-    if [[ "$max_temp" =~ ^[0-9]+$ ]]; then MAX_TEMP=$max_temp; fi
-    if [[ "$min_fan" =~ ^[0-9]+$ ]]; then MIN_FAN=$min_fan; fi
-    if [[ "$max_fan" =~ ^[0-9]+$ ]]; then MAX_FAN=$max_fan; fi
-}
-
-# get current mode from MQTT retained message
-get_mode_value() {
-    # subscribe to mode topic (retained message, timeout after 0.5s)
-    local mode_val=$(timeout 0.5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "homeassistant/unas/fan_mode" -C 1 2>/dev/null || echo "auto")
-
-    # Check if it's "unas_managed", "auto" or a valid number 0-MAX_FAN
-    if [ "$mode_val" = "unas_managed" ]; then
-        echo "unas_managed"
-    elif [ "$mode_val" = "auto" ]; then
-        echo "auto"
-    elif [[ "$mode_val" =~ ^[0-9]+$ ]] && [ "$mode_val" -ge 0 ] && [ "$mode_val" -le "$MAX_FAN" ]; then
-        echo "$mode_val"
-    else
-        echo "auto"
-    fi
-}
-
-read_hdd_temperatures() {
-    HDD_TEMP=0
-
-    for dev in "${hdd_devices[@]}"; do
-        if [ -e "/dev/$dev" ]; then
-            temp=$(timeout 5 smartctl -a "/dev/$dev" 2>/dev/null | awk '/194 Temperature_Celsius/ {print $10}' || echo "0")
-            if [[ "$temp" =~ ^[0-9]+$ ]]; then
-                log_echo "/dev/$dev HDD Temp: ${temp}°C"
-                if [ "$temp" -gt "$HDD_TEMP" ]; then
-                    HDD_TEMP=$temp
-                fi
-            fi
-        fi
+get_max_hdd_temp() {
+    local max=0 temp
+    for dev in "${HDD_DEVICES[@]}"; do
+        [ -e "/dev/$dev" ] || continue
+        temp=$(timeout 5 smartctl -a "/dev/$dev" 2>/dev/null | awk '/194 Temperature_Celsius/ {print $10}' || echo 0)
+        [[ "$temp" =~ ^[0-9]+$ ]] && [ "$temp" -gt "$max" ] && max=$temp
     done
+    echo "$max"
 }
 
-calculate_fan_speed() {
-    local hdd_temp=$1
+calculate_pwm() {
+    local temp=$1 min_temp=$2 max_temp=$3 min_fan=$4 max_fan=$5
+    [ "$temp" -le "$min_temp" ] && echo "$min_fan" && return
+    [ "$temp" -ge "$max_temp" ] && echo "$max_fan" && return
+    awk -v t="$temp" -v t_min="$min_temp" -v t_max="$max_temp" -v f_min="$min_fan" -v f_max="$max_fan" \
+        'BEGIN {print int(f_min + (t - t_min) * (f_max - f_min) / (t_max - t_min))}'
+}
 
-    # Simple linear interpolation between MIN_TEMP and MAX_TEMP
-    if [ "$hdd_temp" -le "$MIN_TEMP" ]; then
-        FAN_SPEED=$MIN_FAN
-    elif [ "$hdd_temp" -ge "$MAX_TEMP" ]; then
-        FAN_SPEED=$MAX_FAN
-    else
-        # Linear: MIN_FAN + (temp - MIN_TEMP) * (MAX_FAN - MIN_FAN) / (MAX_TEMP - MIN_TEMP)
-        FAN_SPEED=$(awk -v temp="$hdd_temp" -v min_temp="$MIN_TEMP" -v max_temp="$MAX_TEMP" -v min_fan="$MIN_FAN" -v max_fan="$MAX_FAN" \
-            'BEGIN {print int(min_fan + (temp - min_temp) * (max_fan - min_fan) / (max_temp - min_temp))}')
+publish_if_changed() {
+    local new_pwm=$1
+    local last_pwm
+    last_pwm=$(cat "$LAST_PWM_FILE" 2>/dev/null || echo "0")
+
+    if [ "$new_pwm" != "$last_pwm" ]; then
+        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+            -t "homeassistant/sensor/unas_fan_speed/state" -m "$new_pwm" 2>/dev/null || true
+        echo "$new_pwm" > "$LAST_PWM_FILE"
     fi
+}
+
+set_pwm() {
+    echo "$1" > /sys/class/hwmon/hwmon0/pwm1
+    echo "$1" > /sys/class/hwmon/hwmon0/pwm2
 }
 
 set_fan_speed() {
-    # Load fan curve configuration from MQTT (only in auto mode)
-    load_fan_curve
+    # shellcheck source=/dev/null
+    source "$STATE_FILE"
+    local pwm
 
-    # Get current mode from MQTT retained message
-    local mode=$(get_mode_value)
+    if [ "$FAN_MODE" = "unas_managed" ]; then
+        # don't touch pwm values - just read and report
+        pwm=$(cat /sys/class/hwmon/hwmon0/pwm1 2>/dev/null || echo 0)
+        echo "UNAS MANAGED MODE: $pwm PWM ($((pwm * 100 / 255))%)"
 
-    if [ "$mode" = "unas_managed" ]; then
-        # UNAS Managed mode: Enable automatic fan control, let UNAS firmware manage fans
-        # pwm_enable values: 1 = manual control, 2 = automatic (UNAS firmware controls)
-        current_enable=$(cat /sys/class/hwmon/hwmon0/pwm1_enable 2>/dev/null || echo "1")
+    elif [ "$FAN_MODE" = "auto" ]; then
+        local temp
+        temp=$(get_max_hdd_temp)
+        pwm=$(calculate_pwm "$temp" "$MIN_TEMP" "$MAX_TEMP" "$MIN_FAN" "$MAX_FAN")
+        set_pwm "$pwm"
+        echo "CUSTOM CURVE MODE: ${temp}°C → $pwm PWM ($((pwm * 100 / MAX_FAN))%)"
 
-        if [ "$current_enable" != "2" ]; then
-            echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable 2>/dev/null || true
-            echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable 2>/dev/null || true
-            echo "UNAS MANAGED MODE: Switched to UNAS firmware control (pwm_enable=2)"
-        fi
-
-        # Read current fan speed set by UNAS firmware
-        FAN_SPEED=$(cat /sys/class/hwmon/hwmon0/pwm1 2>/dev/null || echo "0")
-
-        log_echo "UNAS MANAGED MODE: UNAS firmware controlling fans (Current: ${FAN_SPEED} PWM, $((FAN_SPEED * 100 / 255))%)"
-
-        # Publish current fan speed
-        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-            -t "homeassistant/sensor/unas_fan_speed/state" \
-            -m "$FAN_SPEED"
-
-        # In UNAS managed mode, we don't touch the fans - just monitor and report
-        return
-
-    elif [ "$mode" = "auto" ]; then
-        # Custom Curve mode: Use our temperature-based curve
-        # Ensure manual fan control mode (prevents built-in controller interference)
-        echo 1 > /sys/class/hwmon/hwmon0/pwm1_enable 2>/dev/null || true
-        echo 1 > /sys/class/hwmon/hwmon0/pwm2_enable 2>/dev/null || true
-
-        read_hdd_temperatures
-        calculate_fan_speed "$HDD_TEMP"
-
-        echo "CUSTOM CURVE MODE: Max HDD Temp ${HDD_TEMP}°C → Fan PWM ${FAN_SPEED} ($((FAN_SPEED * 100 / MAX_FAN))%)"
-
-        # Apply fan speed
-        echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm1
-        echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm2
-
-        # Publish auto-calculated fan speed
-        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-            -t "homeassistant/sensor/unas_fan_speed/state" \
-            -m "$FAN_SPEED"
+    elif [[ "$FAN_MODE" =~ ^[0-9]+$ ]] && [ "$FAN_MODE" -ge 0 ] && [ "$FAN_MODE" -le 255 ]; then
+        set_pwm "$FAN_MODE"
+        pwm=$FAN_MODE
+        echo "SET SPEED MODE: $pwm PWM ($((pwm * 100 / 255))%)"
 
     else
-        # Set Speed mode: Use manual mode value
-        # Ensure manual fan control mode (prevents built-in controller interference)
-        echo 1 > /sys/class/hwmon/hwmon0/pwm1_enable 2>/dev/null || true
-        echo 1 > /sys/class/hwmon/hwmon0/pwm2_enable 2>/dev/null || true
-
-        FAN_SPEED=$mode
-        echo "SET SPEED MODE: ${FAN_SPEED} ($((FAN_SPEED * 100 / MAX_FAN))%)"
-
-        # Apply fan speed
-        echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm1
-        echo $FAN_SPEED > /sys/class/hwmon/hwmon0/pwm2
-
-        # Publish mode fan speed
-        mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-            -t "homeassistant/sensor/unas_fan_speed/state" \
-            -m "$FAN_SPEED"
+        echo "Invalid mode: $FAN_MODE, defaulting to UNAS Managed"
+        {
+            echo "FAN_MODE=unas_managed"
+            echo "MIN_TEMP=$MIN_TEMP"
+            echo "MAX_TEMP=$MAX_TEMP"
+            echo "MIN_FAN=$MIN_FAN"
+            echo "MAX_FAN=$MAX_FAN"
+        } > "$STATE_FILE"
+        return
     fi
 
-    if $LOGGING; then
-        echo "Confirmed fan speeds:"
-        cat /sys/class/hwmon/hwmon0/pwm1
-        cat /sys/class/hwmon/hwmon0/pwm2
-    fi
+    publish_if_changed "$pwm"
 }
 
 if $SERVICE; then
     while true; do
         set_fan_speed
-        sleep "$SERVICE_INTERVAL"
+        sleep 1
     done
 else
     set_fan_speed

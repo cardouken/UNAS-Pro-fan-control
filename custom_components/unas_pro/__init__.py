@@ -234,7 +234,6 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self):
-        # check if MQTT integration is still available
         from homeassistant.components import mqtt
 
         if mqtt.DOMAIN not in self.hass.data:
@@ -253,22 +252,32 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             )
             raise UpdateFailed("MQTT integration is required but not found")
 
+        # default data structure - will be partially filled even if SSH fails
+        data = {
+            "scripts_installed": False,
+            "ssh_connected": False,
+            "monitor_running": False,
+            "fan_control_running": False,
+            "mqtt_data": self.mqtt_client.get_data(),
+        }
+
         try:
-            # check if scripts are still installed (firmware update detection)
             scripts_installed = await self.ssh_manager.scripts_installed()
 
             if not scripts_installed:
                 _LOGGER.warning("Scripts missing (firmware update?), reinstalling...")
                 await self.ssh_manager.deploy_scripts()
 
-            # check service status
             monitor_running = await self.ssh_manager.service_running("unas_monitor")
             fan_control_running = await self.ssh_manager.service_running("fan_control")
 
-            # get MQTT data
-            mqtt_data = self.mqtt_client.get_data()
+            data.update({
+                "scripts_installed": scripts_installed,
+                "ssh_connected": True,
+                "monitor_running": monitor_running,
+                "fan_control_running": fan_control_running,
+            })
 
-            # check for new drives and pools when sensor platform is ready
             if hasattr(self, "sensor_add_entities") and hasattr(
                 self, "_discovered_bays"
             ):
@@ -280,16 +289,14 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
                 await _discover_and_add_pool_sensors(self, self.sensor_add_entities)
 
-            return {
-                "scripts_installed": scripts_installed,
-                "ssh_connected": True,
-                "monitor_running": monitor_running,
-                "fan_control_running": fan_control_running,
-                "mqtt_data": mqtt_data,
-            }
-
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with UNAS: {err}")
+            _LOGGER.warning("SSH connection temporarily unavailable: %s", err)
+            # don't raise if update failed - return data with ssh_connected=False
+            # to keep MQTT sensors working while SSH is down (i.e. when UNAS reboots)
+        finally:
+            await self.ssh_manager.disconnect()
+
+        return data
 
     async def async_reinstall_scripts(self) -> None:
         await self.ssh_manager.deploy_scripts()

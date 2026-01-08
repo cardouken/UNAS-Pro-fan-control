@@ -1,10 +1,12 @@
 [Unit]
 Description=Fan Control Based on Temperatures
-After=multi-user.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 ExecStart=/root/fan_control.sh --service
 Restart=always
+RestartSec=30
 User=root
 
 [Install]
