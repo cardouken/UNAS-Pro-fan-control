@@ -128,10 +128,6 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         return self._current_value
 
     @property
-    def available(self) -> bool:
-        return self._current_value is not None
-
-    @property
     def entity_registry_enabled_default(self) -> bool:
         return True
 
