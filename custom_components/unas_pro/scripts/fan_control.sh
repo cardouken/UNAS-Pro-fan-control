@@ -64,25 +64,23 @@ update_state_from_mqtt() {
     sed -i "s/^${var_name}=.*/${var_name}=${payload}/" "$STATE_FILE"
 }
 
-# Fetch retained MQTT messages on startup
-# systemd will restart the script after 30s if network/MQTT not ready
+# Fetch retained MQTT messages on startup (if available)
 echo "Fetching MQTT state..."
 MQTT_OUTPUT=$(timeout 5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
     -t "homeassistant/unas/fan_mode" \
     -t "homeassistant/unas/fan_curve/+" \
     -C 5 \
-    -F "%t %p" 2>/dev/null)
+    -F "%t %p" 2>/dev/null || true)
 
-if [ -z "$MQTT_OUTPUT" ]; then
-    echo "ERROR: No MQTT data received, exiting (systemd will restart)"
-    exit 1
+if [ -n "$MQTT_OUTPUT" ]; then
+    echo "$MQTT_OUTPUT" | while read -r topic payload; do
+        update_state_from_mqtt "$topic" "$payload"
+    done
+    echo "Fan control initialized with MQTT state:"
+else
+    echo "No retained MQTT messages found, using defaults:"
 fi
 
-echo "$MQTT_OUTPUT" | while read -r topic payload; do
-    update_state_from_mqtt "$topic" "$payload"
-done
-
-echo "Fan control initialized with state:"
 cat "$STATE_FILE"
 
 # Start persistent MQTT subscription for updates
