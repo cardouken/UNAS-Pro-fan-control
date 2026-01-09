@@ -119,7 +119,7 @@ async def _cleanup_old_mqtt_configs_on_upgrade(
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    ssh_manager = SSHManager(
+    manager = SSHManager(
         host=entry.data[CONF_HOST],
         username=entry.data[CONF_USERNAME],
         password=entry.data.get(CONF_PASSWORD),
@@ -128,7 +128,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mqtt_password=entry.data.get(CONF_MQTT_PASSWORD),
     )
 
-    await ssh_manager.connect()
+    await manager.connect()
     _LOGGER.info("SSH connection established to %s", entry.data[CONF_HOST])
 
     from homeassistant.loader import async_get_integration
@@ -136,30 +136,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     integration = await async_get_integration(hass, DOMAIN)
     current_version = str(integration.version)
     last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
-    scripts_installed = await ssh_manager.scripts_installed()
+    scripts_installed = await manager.scripts_installed()
     is_dev_version = '-dev' in current_version
 
     if last_deploy_version != current_version or not scripts_installed or is_dev_version:
-        await ssh_manager.deploy_scripts()
+        await manager.deploy_scripts()
         new_data = dict(entry.data)
         new_data[LAST_DEPLOY_VERSION_KEY] = current_version
         hass.config_entries.async_update_entry(entry, data=new_data)
 
-    mqtt_client = UNASMQTTClient(hass, entry.data[CONF_HOST])
-    coordinator = UNASDataUpdateCoordinator(hass, ssh_manager, mqtt_client, entry)
-    mqtt_client._coordinator = coordinator
+    mqtt_client_instance = UNASMQTTClient(hass, entry.data[CONF_HOST])
+    coordinator = UNASDataUpdateCoordinator(hass, manager, mqtt_client_instance, entry)
+    mqtt_client_instance._coordinator = coordinator
 
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
-        "ssh_manager": ssh_manager,
-        "mqtt_client": mqtt_client,
+        "ssh_manager": manager,
+        "mqtt_client": mqtt_client_instance,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await mqtt_client.async_subscribe()
+    await mqtt_client_instance.async_subscribe()
     await _cleanup_old_mqtt_configs_on_upgrade(hass, entry)
 
     return True
@@ -170,28 +170,28 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data = hass.data[DOMAIN].pop(entry.entry_id)
         await data["mqtt_client"].async_unsubscribe()
 
-        ssh_manager = data["ssh_manager"]
+        manager = data["ssh_manager"]
         try:
-            await ssh_manager.execute_command("systemctl stop unas_monitor || true")
-            await ssh_manager.execute_command("systemctl stop fan_control || true")
-            await ssh_manager.execute_command("systemctl disable unas_monitor || true")
-            await ssh_manager.execute_command("systemctl disable fan_control || true")
-            await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
-            await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
-            await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
-            await ssh_manager.execute_command("rm -f /root/unas_monitor.py")
-            await ssh_manager.execute_command("rm -f /root/fan_control.sh")
-            await ssh_manager.execute_command("rm -f /tmp/fan_control_last_pwm")
-            await ssh_manager.execute_command("rm -f /tmp/fan_control_state")
-            await ssh_manager.execute_command("systemctl daemon-reload")
-            await ssh_manager.execute_command("apt remove python3-paho-mqtt -y")
-            await ssh_manager.execute_command("apt remove mosquitto-clients -y")
-            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
-            await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
+            await manager.execute_command("systemctl stop unas_monitor || true")
+            await manager.execute_command("systemctl stop fan_control || true")
+            await manager.execute_command("systemctl disable unas_monitor || true")
+            await manager.execute_command("systemctl disable fan_control || true")
+            await manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
+            await manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
+            await manager.execute_command("rm -f /root/unas_monitor.sh")
+            await manager.execute_command("rm -f /root/unas_monitor.py")
+            await manager.execute_command("rm -f /root/fan_control.sh")
+            await manager.execute_command("rm -f /tmp/fan_control_last_pwm")
+            await manager.execute_command("rm -f /tmp/fan_control_state")
+            await manager.execute_command("systemctl daemon-reload")
+            await manager.execute_command("apt remove python3-paho-mqtt -y")
+            await manager.execute_command("apt remove mosquitto-clients -y")
+            await manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
+            await manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
         except Exception as err:
             _LOGGER.error("Failed to clean up UNAS (non-critical): %s", err)
 
-        await ssh_manager.disconnect()
+        await manager.disconnect()
 
     return unload_ok
 
@@ -204,10 +204,12 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         mqtt_client: UNASMQTTClient,
         entry: ConfigEntry,
     ) -> None:
-        """Initialize."""
         self.ssh_manager = ssh_manager
         self.mqtt_client = mqtt_client
         self.entry = entry
+        self.discovered_bays: set[str] = set()
+        self.discovered_pools: set[str] = set()
+        self.sensor_add_entities = None
 
         super().__init__(
             hass,
@@ -257,7 +259,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
                 "fan_control_running": fan_control_running,
             })
 
-            if hasattr(self, "sensor_add_entities") and hasattr(self, "_discovered_bays"):
+            if hasattr(self, "sensor_add_entities") and hasattr(self, "discovered_bays"):
                 from .sensor import _discover_and_add_drive_sensors, _discover_and_add_pool_sensors
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
                 await _discover_and_add_pool_sensors(self, self.sensor_add_entities)

@@ -173,8 +173,6 @@ async def async_setup_entry(
     async_add_entities(entities)
 
     coordinator.sensor_add_entities = async_add_entities
-    coordinator._discovered_bays = set()
-    coordinator._discovered_pools = set()
 
     async def discover_drives():
         for _ in range(6):
@@ -182,7 +180,7 @@ async def async_setup_entry(
             await _discover_and_add_drive_sensors(coordinator, async_add_entities)
             await _discover_and_add_pool_sensors(coordinator, async_add_entities)
 
-            if coordinator._discovered_bays or coordinator._discovered_pools:
+            if coordinator.discovered_bays or coordinator.discovered_pools:
                 break
 
     hass.async_create_task(discover_drives())
@@ -195,7 +193,7 @@ async def _discover_and_add_drive_sensors(
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_bays = {key.split("_")[2] for key in mqtt_data.keys() if key.startswith("unas_hdd_") and "_temperature" in key}
 
-    new_bays = detected_bays - coordinator._discovered_bays
+    new_bays = detected_bays - coordinator.discovered_bays
     if not new_bays:
         return
 
@@ -210,7 +208,7 @@ async def _discover_and_add_drive_sensors(
 
     if entities:
         async_add_entities(entities)
-        coordinator._discovered_bays.update(new_bays)
+        coordinator.discovered_bays.update(new_bays)
         _LOGGER.info("Added %d sensors for %d new drives", len(entities), len(new_bays))
 
 
@@ -221,7 +219,7 @@ async def _discover_and_add_pool_sensors(
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_pools = {key.replace("unas_pool", "").replace("_usage", "") for key in mqtt_data.keys() if key.startswith("unas_pool") and "_usage" in key}
 
-    new_pools = detected_pools - coordinator._discovered_pools
+    new_pools = detected_pools - coordinator.discovered_pools
     if not new_pools:
         return
 
@@ -236,7 +234,7 @@ async def _discover_and_add_pool_sensors(
 
     if entities:
         async_add_entities(entities)
-        coordinator._discovered_pools.update(new_pools)
+        coordinator.discovered_pools.update(new_pools)
         _LOGGER.info("Added %d sensors for %d new pools", len(entities), len(new_pools))
 
 
@@ -411,7 +409,6 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         return self._mqtt_key in mqtt_data
 
