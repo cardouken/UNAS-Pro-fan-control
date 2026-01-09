@@ -41,11 +41,13 @@ class UNASMonitor:
         self.mqtt.connect(MQTT_HOST, 1883, 60)
         self.mqtt.loop_start()
         time.sleep(2)
-        
         self.mqtt.publish("homeassistant/unas/status", "online", retain=True)
 
         self.bay_cache = {}
         self.known_drives = set()
+
+        self.prev_cpu_idle = None
+        self.prev_cpu_total = None
 
     def publish(self, topic, value):
         self.mqtt.publish(f"homeassistant/sensor/{topic}/state", str(value), retain=True)
@@ -96,22 +98,42 @@ class UNASMonitor:
         return data
 
     def get_cpu_usage(self):
-        def read():
+        def read_proc_stat():
             with open('/proc/stat') as f:
                 parts = f.readline().split()
                 values = list(map(int, parts[1:]))
-                idle = values[3] + values[4]
-                total = sum(values)
-                return idle, total
+            idle_time = values[3] + values[4]  # idle + iowait
+            total_time = sum(values)
+            return idle_time, total_time
 
-        idle1, total1 = read()
-        time.sleep(0.1)
-        idle2, total2 = read()
+        # handle script startup/restart to avoid reporting 0% usage to HA
+        if self.prev_cpu_idle is None:
+            idle_start, total_start = read_proc_stat()
+            time.sleep(1.0)
+            idle_end, total_end = read_proc_stat()
 
-        idle_delta = idle2 - idle1
-        total_delta = total2 - total1
+            self.prev_cpu_idle = idle_end
+            self.prev_cpu_total = total_end
 
-        return int(100 * (1 - idle_delta / total_delta))
+            delta_idle = idle_end - idle_start
+            delta_total = total_end - total_start
+
+            if delta_total <= 0:
+                return 0
+
+            return int(100 * (1 - delta_idle / delta_total))
+
+        idle_now, total_now = read_proc_stat()
+        delta_idle = idle_now - self.prev_cpu_idle
+        delta_total = total_now - self.prev_cpu_total
+
+        self.prev_cpu_idle = idle_now
+        self.prev_cpu_total = total_now
+
+        if delta_total <= 0:
+            return 0
+
+        return int(100 * (1 - delta_idle / delta_total))
 
     def get_bay_number(self, device):
         if device in self.bay_cache:
