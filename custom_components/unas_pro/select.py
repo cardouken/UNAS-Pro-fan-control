@@ -8,7 +8,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
@@ -18,30 +17,27 @@ DEFAULT_FAN_SPEED_50_PCT = 128
 
 _LOGGER = logging.getLogger(__name__)
 
-# Fan control modes
 MODE_UNAS_MANAGED = "UNAS Managed"
 MODE_CUSTOM_CURVE = "Custom Curve"
 MODE_SET_SPEED = "Set Speed"
 
-MQTT_MODE_UNAS_MANAGED = "unas_managed"
-MQTT_MODE_CUSTOM_CURVE = "auto"
+MODE_MAP = {
+    "unas_managed": MODE_UNAS_MANAGED,
+    "auto": MODE_CUSTOM_CURVE,
+}
 
 
 async def async_setup_entry(
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: UNASDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id][
-        "coordinator"
-    ]
+    coordinator: UNASDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     async_add_entities([UNASFanModeSelect(coordinator, hass)])
 
 
 class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
-    def __init__(
-            self, coordinator: UNASDataUpdateCoordinator, hass: HomeAssistant
-    ) -> None:
+    def __init__(self, coordinator: UNASDataUpdateCoordinator, hass: HomeAssistant) -> None:
         super().__init__(coordinator)
         self.hass = hass
         self._attr_name = "UNAS Fan Mode"
@@ -65,39 +61,25 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
         if (last_state := await self.async_get_last_state()) is not None:
             self._current_option = last_state.state
             self._last_pwm = last_state.attributes.get("last_pwm")
-            _LOGGER.debug("Restored fan mode: %s (last_pwm: %s)", self._current_option, self._last_pwm)
 
-            # publish restored state to MQTT so the script knows what mode to run
-            mqtt_mode = MQTT_MODE_UNAS_MANAGED
-            if self._current_option == MODE_UNAS_MANAGED:
-                mqtt_mode = MQTT_MODE_UNAS_MANAGED
-            elif self._current_option == MODE_CUSTOM_CURVE:
-                mqtt_mode = MQTT_MODE_CUSTOM_CURVE
+            mqtt_mode = "unas_managed"
+            if self._current_option == MODE_CUSTOM_CURVE:
+                mqtt_mode = "auto"
             elif self._current_option == MODE_SET_SPEED:
-                if self._last_pwm is not None:
-                    mqtt_mode = str(self._last_pwm)
-                    _LOGGER.debug("Using stored last PWM: %s", self._last_pwm)
-                else:
-                    # fallback if no stored PWM
-                    mqtt_mode = str(DEFAULT_FAN_SPEED_50_PCT)
-                    self._last_pwm = DEFAULT_FAN_SPEED_50_PCT
-                    _LOGGER.debug("No stored PWM, using default: %s", DEFAULT_FAN_SPEED_50_PCT)
+                mqtt_mode = str(self._last_pwm or DEFAULT_FAN_SPEED_50_PCT)
+                self._last_pwm = self._last_pwm or DEFAULT_FAN_SPEED_50_PCT
 
-            await self._publish_mode_to_mqtt(mqtt_mode)
-            _LOGGER.info("Published restored fan mode to MQTT: %s -> %s", self._current_option, mqtt_mode)
+            await self._publish_mode(mqtt_mode)
         else:
             self._current_option = MODE_UNAS_MANAGED
-            await self._publish_mode_to_mqtt(MQTT_MODE_UNAS_MANAGED)
+            await self._publish_mode("unas_managed")
 
         @callback
         def message_received(msg):
             payload = msg.payload
-            old_option = self._current_option
-
-            if payload == MQTT_MODE_UNAS_MANAGED:
-                self._current_option = MODE_UNAS_MANAGED
-            elif payload == MQTT_MODE_CUSTOM_CURVE:
-                self._current_option = MODE_CUSTOM_CURVE
+            
+            if payload in MODE_MAP:
+                self._current_option = MODE_MAP[payload]
             elif payload.isdigit():
                 self._current_option = MODE_SET_SPEED
                 try:
@@ -108,29 +90,16 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
                 self._current_option = MODE_UNAS_MANAGED
 
             self.async_write_ha_state()
-            if old_option != self._current_option:
-                _LOGGER.info("Fan mode changed: %s -> %s", old_option, self._current_option)
-            else:
-                _LOGGER.debug("Fan mode reconfirmed: %s", self._current_option)
 
         self._unsubscribe = await mqtt.async_subscribe(
-            self.hass,
-            "homeassistant/unas/fan_mode",
-            message_received,
-            qos=0,
+            self.hass, "homeassistant/unas/fan_mode", message_received, qos=0
         )
 
-    async def _publish_mode_to_mqtt(self, mode: str) -> None:
+    async def _publish_mode(self, mode: str) -> None:
         try:
-            await mqtt.async_publish(
-                self.hass,
-                "homeassistant/unas/fan_mode",
-                mode,
-                qos=0,
-                retain=True,
-            )
+            await mqtt.async_publish(self.hass, "homeassistant/unas/fan_mode", mode, qos=0, retain=True)
         except Exception as err:
-            _LOGGER.error("Failed to publish fan mode to MQTT: %s", err)
+            _LOGGER.error("Failed to publish fan mode: %s", err)
 
     async def _ensure_service_running(self) -> None:
         try:
@@ -154,28 +123,20 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        attrs = {}
-        if self._last_pwm is not None:
-            attrs["last_pwm"] = self._last_pwm
-        return attrs
+        return {"last_pwm": self._last_pwm} if self._last_pwm is not None else {}
 
     async def async_select_option(self, option: str) -> None:
-        """Handle mode selection - just publish to MQTT, service handles all modes."""
-        try:
-            await self._ensure_service_running()
+        await self._ensure_service_running()
 
-            if option == MODE_UNAS_MANAGED:
-                await self._publish_mode_to_mqtt(MQTT_MODE_UNAS_MANAGED)
-            elif option == MODE_CUSTOM_CURVE:
-                await self._publish_mode_to_mqtt(MQTT_MODE_CUSTOM_CURVE)
-            elif option == MODE_SET_SPEED:
-                mqtt_data = self.coordinator.mqtt_client.get_data()
-                current_speed = mqtt_data.get("unas_fan_speed", DEFAULT_FAN_SPEED_50_PCT)
-                self._last_pwm = current_speed
-                await self._publish_mode_to_mqtt(str(current_speed))
+        if option == MODE_UNAS_MANAGED:
+            await self._publish_mode("unas_managed")
+        elif option == MODE_CUSTOM_CURVE:
+            await self._publish_mode("auto")
+        elif option == MODE_SET_SPEED:
+            mqtt_data = self.coordinator.mqtt_client.get_data()
+            current_speed = mqtt_data.get("unas_fan_speed", DEFAULT_FAN_SPEED_50_PCT)
+            self._last_pwm = current_speed
+            await self._publish_mode(str(current_speed))
 
-            self._current_option = option
-            self.async_write_ha_state()
-
-        except Exception as err:
-            _LOGGER.error("Failed to change fan mode: %s", err)
+        self._current_option = option
+        self.async_write_ha_state()

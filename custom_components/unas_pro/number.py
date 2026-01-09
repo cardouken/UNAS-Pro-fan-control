@@ -81,23 +81,16 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         if (last_state := await self.async_get_last_state()) is not None:
             try:
                 self._current_value = float(last_state.state)
-                _LOGGER.debug("Restored fan speed: %s%%", self._current_value)
             except (ValueError, TypeError):
-                _LOGGER.warning("Could not restore fan speed from: %s", last_state.state)
+                pass
 
         @callback
         def speed_message_received(msg):
             try:
                 pwm_value = int(msg.payload)
-                # convert PWM (0-255) to percentage (0-100)
                 percentage = round((pwm_value * 100) / 255)
-                old_value = self._current_value
                 self._current_value = percentage
-                if old_value != self._current_value:
-                    self.async_write_ha_state()
-                    _LOGGER.debug(
-                        "Fan speed updated: %s%% (PWM: %s)", percentage, pwm_value
-                    )
+                self.async_write_ha_state()
             except (ValueError, TypeError) as err:
                 _LOGGER.error("Failed to parse fan speed: %s", err)
 
@@ -113,25 +106,14 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
             else:
                 self._current_mode = None
             self.async_write_ha_state()
-            _LOGGER.debug("Fan mode updated: %s", self._current_mode)
 
-        # subscribe to fan speed topic to get current speed
         self._unsubscribe_speed = await mqtt.async_subscribe(
-            self.hass,
-            "homeassistant/sensor/unas_fan_speed/state",
-            speed_message_received,
-            qos=0,
+            self.hass, "homeassistant/sensor/unas_fan_speed/state", speed_message_received, qos=0
         )
 
-        # subscribe to mode topic to know current mode
         self._unsubscribe_mode = await mqtt.async_subscribe(
-            self.hass,
-            "homeassistant/unas/fan_mode",
-            mode_message_received,
-            qos=0,
+            self.hass, "homeassistant/unas/fan_mode", mode_message_received, qos=0
         )
-
-        _LOGGER.info("Fan speed number entity subscribed to MQTT topics")
 
     async def async_will_remove_from_hass(self) -> None:
         if self._unsubscribe_speed:
@@ -163,33 +145,18 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         return "mdi:fan"
 
     async def async_set_native_value(self, value: float) -> None:
-        # check if we're in Set Speed mode
         if self._current_mode != "set_speed":
-            _LOGGER.warning(
-                "Cannot set fan speed - not in Set Speed mode (current: %s)",
-                self._current_mode,
-            )
+            _LOGGER.warning("Cannot set fan speed - not in Set Speed mode")
             return
 
-        try:
-            # convert percentage to PWM (0-255)
-            pwm_value = round((value * 255) / 100)
-            _LOGGER.info("Setting fan speed to %s%% (PWM: %s)", value, pwm_value)
+        pwm_value = round((value * 255) / 100)
 
-            await mqtt.async_publish(
-                self.hass,
-                "homeassistant/unas/fan_mode",
-                str(pwm_value),
-                qos=0,
-                retain=True,
-            )
+        await mqtt.async_publish(
+            self.hass, "homeassistant/unas/fan_mode", str(pwm_value), qos=0, retain=True
+        )
 
-            # update local value immediately for responsiveness
-            self._current_value = value
-            self.async_write_ha_state()
-
-        except Exception as err:
-            _LOGGER.error("Failed to set fan speed: %s", err)
+        self._current_value = value
+        self.async_write_ha_state()
 
 
 class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
@@ -239,47 +206,31 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         @callback
         def message_received(msg):
             try:
-                value = float(msg.payload)
-
-                # if this is a fan param, convert PWM (0-255) to percentage (0-100)
+                value = int(float(msg.payload))
+                
                 if self._is_fan_param:
                     value = round((value * 100) / 255)
-
-                # convert to int for integer precision (no decimals)
-                value = int(value)
 
                 if self._attr_native_min_value <= value <= self._attr_native_max_value:
                     self._attr_native_value = value
                     self.async_write_ha_state()
-                    _LOGGER.debug("Fan curve %s updated to %s", self._key, value)
             except (ValueError, TypeError):
-                _LOGGER.warning("Invalid value for %s: %s", self._key, msg.payload)
+                pass
 
         self._unsubscribe = await mqtt.async_subscribe(
-            self.hass,
-            self._mqtt_topic,
-            message_received,
-            qos=0,
+            self.hass, self._mqtt_topic, message_received, qos=0
         )
 
-        # try to read current value from MQTT (retained message)
-        # if not available after 1 second, use default
-        await self.hass.async_add_executor_job(self._wait_for_mqtt_or_default)
+        # Set default after brief delay if no MQTT value received
+        await self.hass.async_add_executor_job(self._init_default)
 
-        _LOGGER.info("Fan curve %s subscribed to MQTT", self._key)
-
-    def _wait_for_mqtt_or_default(self) -> None:
+    def _init_default(self) -> None:
         import time
-
         time.sleep(1)
-
-        # If still None after waiting, set to default and publish
+        
         if self._attr_native_value is None:
             self._attr_native_value = int(self._default)
             self.hass.add_job(self._publish_to_mqtt, self._default)
-            _LOGGER.info(
-                "Fan curve %s initialized to default: %s", self._key, self._default
-            )
 
     async def async_will_remove_from_hass(self) -> None:
         if self._unsubscribe:
@@ -291,87 +242,41 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         return self._attr_native_value is not None
 
     async def async_set_native_value(self, value: float) -> None:
-        # convert to int for integer precision
         value = int(value)
 
-        # validate against other curve parameters
-        try:
-            await self._validate_curve_parameters(value)
-        except ValueError as err:
-            _LOGGER.error("Invalid fan curve value: %s", err)
-            raise
-
-        self._attr_native_value = value
-        self.async_write_ha_state()
-
-        await self._publish_to_mqtt(value)
-
-    async def _validate_curve_parameters(self, new_value: float) -> None:
         mqtt_data = self.coordinator.mqtt_client.get_data()
 
-        # extract current curve values (MQTT stores PWM, convert to %)
-        min_temp_pwm = mqtt_data.get(
-            "fan_curve_min_temp", 43 if self._key != "min_temp" else new_value
-        )
-        max_temp_pwm = mqtt_data.get(
-            "fan_curve_max_temp", 47 if self._key != "max_temp" else new_value
-        )
+        min_temp = mqtt_data.get("fan_curve_min_temp", 43 if self._key != "min_temp" else value)
+        max_temp = mqtt_data.get("fan_curve_max_temp", 47 if self._key != "max_temp" else value)
         min_fan_pwm = mqtt_data.get("fan_curve_min_fan", 204)
         max_fan_pwm = mqtt_data.get("fan_curve_max_fan", 255)
 
-        # convert PWM to percentage for fan params
-        min_temp = min_temp_pwm
-        max_temp = max_temp_pwm
-        min_fan = (
-            round((min_fan_pwm * 100) / 255)
-            if isinstance(min_fan_pwm, (int, float))
-            else 80
-        )
-        max_fan = (
-            round((max_fan_pwm * 100) / 255)
-            if isinstance(max_fan_pwm, (int, float))
-            else 100
-        )
+        min_fan = round((min_fan_pwm * 100) / 255) if isinstance(min_fan_pwm, (int, float)) else 80
+        max_fan = round((max_fan_pwm * 100) / 255) if isinstance(max_fan_pwm, (int, float)) else 100
 
         if self._key == "min_temp":
-            min_temp = new_value
+            min_temp = value
         elif self._key == "max_temp":
-            max_temp = new_value
+            max_temp = value
         elif self._key == "min_fan":
-            min_fan = new_value
+            min_fan = value
         elif self._key == "max_fan":
-            max_fan = new_value
+            max_fan = value
 
         if max_temp <= min_temp:
-            raise ValueError(
-                f"Max temperature ({max_temp}°C) must be greater than min temperature ({min_temp}°C)"
-            )
-
+            raise ValueError(f"Max temperature ({max_temp}°C) must be greater than min temperature ({min_temp}°C)")
         if max_fan < min_fan:
-            raise ValueError(
-                f"Max fan speed ({max_fan}%) must be greater than or equal to min fan speed ({min_fan}%)"
-            )
+            raise ValueError(f"Max fan speed ({max_fan}%) must be >= min fan speed ({min_fan}%)")
+
+        self._attr_native_value = value
+        self.async_write_ha_state()
+        await self._publish_to_mqtt(value)
 
     async def _publish_to_mqtt(self, value: float) -> None:
-        try:
-            # if this is a fan param, convert percentage (0-100) to PWM (0-255)
-            mqtt_value = value
-            if self._is_fan_param:
-                mqtt_value = round((value * 255) / 100)
+        mqtt_value = value
+        if self._is_fan_param:
+            mqtt_value = round((value * 255) / 100)
 
-            await mqtt.async_publish(
-                self.hass,
-                self._mqtt_topic,
-                str(int(mqtt_value)),
-                qos=0,
-                retain=True,
-            )
-            _LOGGER.info(
-                "Published fan curve %s = %s%s to MQTT (MQTT value: %s)",
-                self._key,
-                value,
-                self._attr_native_unit_of_measurement,
-                mqtt_value,
-            )
-        except Exception as err:
-            _LOGGER.error("Failed to publish %s to MQTT: %s", self._key, err)
+        await mqtt.async_publish(
+            self.hass, self._mqtt_topic, str(int(mqtt_value)), qos=0, retain=True
+        )

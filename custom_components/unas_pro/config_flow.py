@@ -25,12 +25,9 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): str,
+        vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Required(
-            CONF_MQTT_HOST,
-            description={"suggested_value": "192.168.1.111 or homeassistant.local"},
-        ): str,
+        vol.Required(CONF_MQTT_HOST,): str,
         vol.Required(CONF_MQTT_USER): str,
         vol.Required(CONF_MQTT_PASSWORD): str,
     }
@@ -40,22 +37,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
         if user_input is not None:
-            user_input[CONF_MQTT_HOST] = self._clean_mqtt_host(user_input[CONF_MQTT_HOST])
-
-            error_key = await self._validate_connection(
-                user_input[CONF_HOST],
-                user_input[CONF_USERNAME],
-                user_input[CONF_PASSWORD],
-            )
-
-            if error_key:
+            if error_key := await self._test_ssh(user_input[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD]):
                 errors["base"] = error_key
             else:
                 self.hass.config_entries.async_update_entry(entry, data=user_input)
@@ -65,16 +52,11 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         reconfigure_schema = vol.Schema(
             {
                 vol.Required(CONF_HOST, default=entry.data.get(CONF_HOST)): str,
-                vol.Optional(
-                    CONF_USERNAME,
-                    default=entry.data.get(CONF_USERNAME, DEFAULT_USERNAME),
-                ): str,
+                vol.Optional(CONF_USERNAME, default=entry.data.get(CONF_USERNAME, DEFAULT_USERNAME)): str,
                 vol.Required(CONF_PASSWORD, default=entry.data.get(CONF_PASSWORD)): str,
                 vol.Required(CONF_MQTT_HOST, default=entry.data.get(CONF_MQTT_HOST)): str,
                 vol.Required(CONF_MQTT_USER, default=entry.data.get(CONF_MQTT_USER)): str,
-                vol.Required(
-                    CONF_MQTT_PASSWORD, default=entry.data.get(CONF_MQTT_PASSWORD)
-                ): str,
+                vol.Required(CONF_MQTT_PASSWORD, default=entry.data.get(CONF_MQTT_PASSWORD)): str,
             }
         )
 
@@ -82,86 +64,45 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure",
             data_schema=reconfigure_schema,
             errors=errors,
-            description_placeholders={
-                "host": entry.data.get(CONF_HOST, "unknown"),
-            },
+            description_placeholders={"host": entry.data.get(CONF_HOST, "unknown")},
         )
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
 
         if mqtt.DOMAIN not in self.hass.data:
             return self.async_abort(reason="mqtt_required")
 
-
         if user_input is not None:
-            user_input[CONF_MQTT_HOST] = self._clean_mqtt_host(user_input[CONF_MQTT_HOST])
-
-            error_key = await self._validate_connection(
-                user_input[CONF_HOST],
-                user_input[CONF_USERNAME],
-                user_input[CONF_PASSWORD],
-            )
-
-            if error_key:
+            if error_key := await self._test_ssh(user_input[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD]):
                 errors["base"] = error_key
             else:
                 await self.async_set_unique_id(user_input[CONF_HOST])
                 self._abort_if_unique_id_configured()
-
                 return self.async_create_entry(
                     title=f"UNAS Pro ({user_input[CONF_HOST]})",
                     data=user_input,
                 )
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=STEP_USER_DATA_SCHEMA,
-            errors=errors,
-        )
+        return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors)
 
-    def _clean_mqtt_host(self, mqtt_host: str) -> str:
-        if ":" in mqtt_host:
-            cleaned = mqtt_host.split(":")[0]
-            _LOGGER.debug("Stripped port from MQTT host: %s -> %s", mqtt_host, cleaned)
-            return cleaned
-        return mqtt_host
-
-    async def _validate_connection(
-        self, host: str, username: str, password: str
-    ) -> str | None:
-        try:
-            await self._test_connection(host, username, password)
-            return None
-        except asyncssh.Error as err:
-            _LOGGER.error("SSH connection failed: %s", err)
-            return "cannot_connect"
-        except asyncio.TimeoutError:
-            _LOGGER.error("SSH connection timed out")
-            return "timeout_connect"
-        except Exception as err:
-            _LOGGER.exception("Unexpected error during connection test: %s", err)
-            return "unknown"
-
-    async def _test_connection(self, host: str, username: str, password: str) -> None:
-        conn = None
+    async def _test_ssh(self, host: str, username: str, password: str) -> str | None:
         try:
             conn = await asyncio.wait_for(
-                asyncssh.connect(
-                    host,
-                    username=username,
-                    password=password,
-                    known_hosts=None,
-                ),
+                asyncssh.connect(host, username=username, password=password, known_hosts=None),
                 timeout=10.0,
             )
             result = await conn.run("echo 'test'", check=True)
+            conn.close()
+            await conn.wait_closed()
+            
             if result.stdout.strip() != "test":
-                raise Exception("Command execution test failed")
-        finally:
-            if conn:
-                conn.close()
-                await conn.wait_closed()
+                return "unknown"
+            return None
+        except asyncssh.Error:
+            return "cannot_connect"
+        except asyncio.TimeoutError:
+            return "timeout_connect"
+        except Exception:
+            return "unknown"
 

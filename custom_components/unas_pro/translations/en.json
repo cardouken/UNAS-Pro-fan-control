@@ -5,10 +5,10 @@
         "title": "Connect to UNAS Pro",
         "description": "Enter your UNAS Pro SSH credentials and MQTT broker details. Root access is required to install monitoring scripts.",
         "data": {
-          "host": "Host (UNAS IP Address)",
+          "host": "UNAS Host (IP address or hostname)",
           "username": "UNAS SSH username (root by default)",
           "password": "UNAS SSH password",
-          "mqtt_host": "MQTT Broker Host",
+          "mqtt_host": "MQTT Broker Host (IP address or hostname)",
           "mqtt_user": "MQTT Username",
           "mqtt_password": "MQTT Password"
         }

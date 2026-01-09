@@ -128,38 +128,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mqtt_password=entry.data.get(CONF_MQTT_PASSWORD),
     )
 
-    try:
-        await ssh_manager.connect()
-        _LOGGER.info("SSH connection established to %s", entry.data[CONF_HOST])
+    await ssh_manager.connect()
+    _LOGGER.info("SSH connection established to %s", entry.data[CONF_HOST])
 
-        from homeassistant.loader import async_get_integration
+    from homeassistant.loader import async_get_integration
 
-        integration = await async_get_integration(hass, DOMAIN)
-        current_version = str(integration.version)
-        last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
-        scripts_installed = await ssh_manager.scripts_installed()
+    integration = await async_get_integration(hass, DOMAIN)
+    current_version = str(integration.version)
+    last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
+    scripts_installed = await ssh_manager.scripts_installed()
 
-        if last_deploy_version != current_version or not scripts_installed:
-            if not scripts_installed:
-                _LOGGER.info("Scripts not found, deploying...")
-            else:
-                _LOGGER.info(
-                    "Integration upgraded from %s to %s - redeploying scripts",
-                    last_deploy_version or "unknown",
-                    current_version,
-                )
-            await ssh_manager.deploy_scripts()
-
-            # mark this version as deployed
-            new_data = dict(entry.data)
-            new_data[LAST_DEPLOY_VERSION_KEY] = current_version
-            hass.config_entries.async_update_entry(entry, data=new_data)
-        else:
-            _LOGGER.debug("Scripts up to date (version %s)", current_version)
-
-    except Exception as err:
-        _LOGGER.error("Failed to connect to UNAS: %s", err)
-        return False
+    if last_deploy_version != current_version or not scripts_installed:
+        await ssh_manager.deploy_scripts()
+        new_data = dict(entry.data)
+        new_data[LAST_DEPLOY_VERSION_KEY] = current_version
+        hass.config_entries.async_update_entry(entry, data=new_data)
 
     mqtt_client = UNASMQTTClient(hass, entry.data[CONF_HOST])
     coordinator = UNASDataUpdateCoordinator(hass, ssh_manager, mqtt_client, entry)
@@ -188,8 +171,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         ssh_manager = data["ssh_manager"]
         try:
-            _LOGGER.info("Cleaning up UNAS services and scripts...")
-
             await ssh_manager.execute_command("systemctl stop unas_monitor || true")
             await ssh_manager.execute_command("systemctl stop fan_control || true")
             await ssh_manager.execute_command("systemctl disable unas_monitor || true")
@@ -198,13 +179,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
             await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
             await ssh_manager.execute_command("rm -f /root/fan_control.sh")
+            await ssh_manager.execute_command("rm -f /tmp/fan_control_last_pwm")
+            await ssh_manager.execute_command("rm -f /tmp/fan_control_state")
             await ssh_manager.execute_command("systemctl daemon-reload")
-
-            # Re-enable UNAS firmware fan control
             await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
             await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
-
-            _LOGGER.info("Successfully cleaned up UNAS - restored to stock fan control")
         except Exception as err:
             _LOGGER.error("Failed to clean up UNAS (non-critical): %s", err)
 
@@ -237,11 +216,8 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         from homeassistant.components import mqtt
 
         if mqtt.DOMAIN not in self.hass.data:
-            _LOGGER.error(
-                "MQTT integration has been removed - UNAS Pro requires MQTT to function"
-            )
+            _LOGGER.error("MQTT integration removed - UNAS Pro requires MQTT")
             from homeassistant.helpers import issue_registry as ir
-
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -252,7 +228,6 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             )
             raise UpdateFailed("MQTT integration is required but not found")
 
-        # default data structure - will be partially filled even if SSH fails
         data = {
             "scripts_installed": False,
             "ssh_connected": False,
@@ -265,7 +240,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             scripts_installed = await self.ssh_manager.scripts_installed()
 
             if not scripts_installed:
-                _LOGGER.warning("Scripts missing (firmware update?), reinstalling...")
+                _LOGGER.warning("Scripts missing, reinstalling...")
                 await self.ssh_manager.deploy_scripts()
 
             monitor_running = await self.ssh_manager.service_running("unas_monitor")
@@ -278,21 +253,13 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
                 "fan_control_running": fan_control_running,
             })
 
-            if hasattr(self, "sensor_add_entities") and hasattr(
-                self, "_discovered_bays"
-            ):
-                from .sensor import (
-                    _discover_and_add_drive_sensors,
-                    _discover_and_add_pool_sensors,
-                )
-
+            if hasattr(self, "sensor_add_entities") and hasattr(self, "_discovered_bays"):
+                from .sensor import _discover_and_add_drive_sensors, _discover_and_add_pool_sensors
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
                 await _discover_and_add_pool_sensors(self, self.sensor_add_entities)
 
         except Exception as err:
             _LOGGER.warning("SSH connection temporarily unavailable: %s", err)
-            # don't raise if update failed - return data with ssh_connected=False
-            # to keep MQTT sensors working while SSH is down (i.e. when UNAS reboots)
         finally:
             await self.ssh_manager.disconnect()
 
