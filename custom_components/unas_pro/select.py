@@ -109,6 +109,13 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
         except Exception as err:
             _LOGGER.error("Failed to start fan_control service: %s", err)
 
+    @property
+    def available(self) -> bool:
+        mqtt_available = self.coordinator.mqtt_client.is_available()
+        service_running = self.coordinator.data.get("fan_control_running", False)
+        has_state = self._current_option is not None
+        return mqtt_available and service_running and has_state
+
     async def async_will_remove_from_hass(self) -> None:
         if self._unsubscribe:
             self._unsubscribe()
@@ -117,10 +124,6 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
     @property
     def current_option(self) -> str | None:
         return self._current_option
-
-    @property
-    def available(self) -> bool:
-        return self._current_option is not None
 
     @property
     def extra_state_attributes(self) -> dict:

@@ -136,6 +136,12 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         return True
 
     @property
+    def available(self) -> bool:
+        mqtt_available = self.coordinator.mqtt_client.is_available()
+        service_running = self.coordinator.data.get("fan_control_running", False)
+        return mqtt_available and service_running
+
+    @property
     def icon(self) -> str:
         if self._current_mode == "unas_managed":
             return "mdi:fan-off"
@@ -240,7 +246,10 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        return self._attr_native_value is not None
+        mqtt_available = self.coordinator.mqtt_client.is_available()
+        service_running = self.coordinator.data.get("fan_control_running", False)
+        has_value = self._attr_native_value is not None
+        return mqtt_available and service_running and has_value
 
     async def async_set_native_value(self, value: float) -> None:
         value = int(value)

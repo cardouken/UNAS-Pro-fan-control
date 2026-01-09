@@ -275,6 +275,8 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
+        if not self.coordinator.mqtt_client.is_available():
+            return False
         return self._mqtt_key in self.coordinator.data.get("mqtt_data", {})
 
     @property
@@ -409,6 +411,8 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
+        if not self.coordinator.mqtt_client.is_available():
+            return False
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         return self._mqtt_key in mqtt_data
 

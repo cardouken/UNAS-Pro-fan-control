@@ -37,11 +37,14 @@ class UNASMonitor:
         self.mqtt.on_connect = lambda c, u, f, rc: logger.info("MQTT connected" if rc == 0 else f"MQTT failed: {rc}")
         self.mqtt.on_disconnect = lambda c, u, rc: logger.warning("MQTT disconnected") if rc != 0 else None
 
+        self.mqtt.will_set("homeassistant/unas/status", "offline", retain=True)
         self.mqtt.connect(MQTT_HOST, 1883, 60)
         self.mqtt.loop_start()
         time.sleep(2)
+        
+        self.mqtt.publish("homeassistant/unas/status", "online", retain=True)
 
-        self.bay_cache = {}  # device -> bay
+        self.bay_cache = {}
         self.known_drives = set()
 
     def publish(self, topic, value):

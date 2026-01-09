@@ -36,5 +36,9 @@ class UNASReinstallScriptsButton(CoordinatorEntity, ButtonEntity):
             model="UNAS Pro",
         )
 
+    @property
+    def available(self) -> bool:
+        return self.coordinator.mqtt_client.is_available()
+
     async def async_press(self) -> None:
         await self.coordinator.async_reinstall_scripts()
