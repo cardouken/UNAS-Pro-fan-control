@@ -199,6 +199,8 @@ async def _discover_and_add_drive_sensors(
     if not new_bays:
         return
 
+    _LOGGER.debug("Discovered new drive bays: %s", sorted(new_bays))
+
     entities = []
     for bay_num in sorted(new_bays):
         for sensor_suffix, name, unit, device_class, state_class, icon in DRIVE_SENSORS:
@@ -209,6 +211,7 @@ async def _discover_and_add_drive_sensors(
     if entities:
         async_add_entities(entities)
         coordinator._discovered_bays.update(new_bays)
+        _LOGGER.info("Added %d sensors for %d new drives", len(entities), len(new_bays))
 
 
 async def _discover_and_add_pool_sensors(
@@ -222,6 +225,8 @@ async def _discover_and_add_pool_sensors(
     if not new_pools:
         return
 
+    _LOGGER.debug("Discovered new storage pools: %s", sorted(new_pools))
+
     entities = []
     for pool_num in sorted(new_pools):
         for sensor_suffix, name, unit, device_class, state_class, icon in STORAGE_POOL_SENSORS:
@@ -232,6 +237,7 @@ async def _discover_and_add_pool_sensors(
     if entities:
         async_add_entities(entities)
         coordinator._discovered_pools.update(new_pools)
+        _LOGGER.info("Added %d sensors for %d new pools", len(entities), len(new_pools))
 
 
 class UNASSensor(CoordinatorEntity, SensorEntity):

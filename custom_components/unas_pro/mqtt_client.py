@@ -30,6 +30,7 @@ class UNASMQTTClient:
             try:
                 sub = await mqtt.async_subscribe(self.hass, topic, handler, qos=0)
                 self._subscriptions.append(sub)
+                _LOGGER.debug("Subscribed to MQTT topic: %s", topic)
             except Exception as err:
                 _LOGGER.error("Failed to subscribe to %s: %s", topic, err)
 
@@ -37,6 +38,7 @@ class UNASMQTTClient:
         for unsub in self._subscriptions:
             unsub()
         self._subscriptions.clear()
+        _LOGGER.debug("Unsubscribed from %d MQTT topics", len(self._subscriptions))
 
     @callback
     def _handle_message(self, msg) -> None:

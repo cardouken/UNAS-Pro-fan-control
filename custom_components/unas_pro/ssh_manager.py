@@ -47,6 +47,7 @@ class SSHManager:
         if self._conn:
             try:
                 await self._conn.run("true", timeout=2, check=False)
+                _LOGGER.debug("SSH connection reused")
                 return
             except Exception:
                 try:
@@ -56,6 +57,7 @@ class SSHManager:
                     pass
                 self._conn = None
 
+        _LOGGER.debug("Establishing SSH connection to %s", self.host)
         self._conn = await asyncssh.connect(
             self.host,
             port=self.port,
@@ -64,6 +66,7 @@ class SSHManager:
             client_keys=[self.ssh_key] if self.ssh_key else None,
             known_hosts=None,
         )
+        _LOGGER.debug("SSH connection established")
 
     async def disconnect(self) -> None:
         if self._conn:
@@ -85,13 +88,17 @@ class SSHManager:
             stdout, _ = await self.execute_command(
                 "test -f /root/unas_monitor.sh && test -f /root/fan_control.sh && echo 'yes' || echo 'no'"
             )
-        return stdout.strip() == "yes"
+        installed = stdout.strip() == "yes"
+        _LOGGER.debug("Scripts installed: %s", installed)
+        return installed
 
     async def service_running(self, service_name: str) -> bool:
         stdout, _ = await self.execute_command(
             f"systemctl is-active {service_name} 2>/dev/null || echo 'inactive'"
         )
-        return stdout.strip() == "active"
+        running = stdout.strip() == "active"
+        _LOGGER.debug("Service %s running: %s", service_name, running)
+        return running
 
     def _replace_mqtt_credentials(self, script: str) -> str:
         replacements = {
