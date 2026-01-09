@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
@@ -48,12 +49,12 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
         self._last_pwm = None
         self._unsubscribe = None
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

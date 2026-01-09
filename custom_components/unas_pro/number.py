@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from homeassistant.components import mqtt
 
@@ -68,12 +69,12 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         self._unsubscribe_speed = None
         self._unsubscribe_mode = None
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -193,12 +194,12 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
 
         self._mqtt_topic = f"homeassistant/unas/fan_curve/{key}"
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

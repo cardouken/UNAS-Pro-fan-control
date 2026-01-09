@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from . import UNASDataUpdateCoordinator
 from .const import DOMAIN
@@ -30,12 +31,12 @@ class UNASScriptsInstalledSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = "UNAS Pro Scripts Installed"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_scripts_installed"
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     @property
     def is_on(self) -> bool:
@@ -48,12 +49,12 @@ class UNASMonitorRunningSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = "UNAS Pro Monitor Service"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_monitor_running"
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     @property
     def is_on(self) -> bool:
@@ -66,12 +67,12 @@ class UNASFanControlRunningSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = "UNAS Pro Fan Control Service"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_control_running"
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     @property
     def is_on(self) -> bool:

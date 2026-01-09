@@ -18,6 +18,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from . import UNASDataUpdateCoordinator
 from .const import DOMAIN
@@ -259,12 +260,12 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
         if icon:
             self._attr_icon = icon
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -288,12 +289,12 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_viz"
         self._attr_icon = "mdi:chart-line"
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.entry.entry_id)},
-            "name": f"UNAS Pro ({coordinator.ssh_manager.host})",
-            "manufacturer": "Ubiquiti",
-            "model": "UNAS Pro",
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            manufacturer="Ubiquiti",
+            model="UNAS Pro",
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -387,19 +388,18 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
         if icon:
             self._attr_icon = icon
 
-        # get drive model/serial from MQTT data for device info
         mqtt_data = coordinator.mqtt_client.get_data()
         model = mqtt_data.get(f"unas_hdd_{bay_num}_model", "Unknown")
         serial = mqtt_data.get(f"unas_hdd_{bay_num}_serial", "")
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"{coordinator.entry.entry_id}_hdd_{bay_num}")},
-            "name": f"UNAS HDD {bay_num}",
-            "manufacturer": model.split()[0] if model != "Unknown" else "Unknown",
-            "model": model,
-            "serial_number": serial,
-            "via_device": (DOMAIN, coordinator.entry.entry_id),
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_hdd_{bay_num}")},
+            name=f"UNAS HDD {bay_num}",
+            manufacturer=model.split()[0] if model != "Unknown" else "Unknown",
+            model=model,
+            serial_number=serial,
+            via_device=(DOMAIN, coordinator.entry.entry_id),
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
