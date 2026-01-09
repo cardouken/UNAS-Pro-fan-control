@@ -150,8 +150,8 @@ read_drive_data() {
         # Parse RPM
         rpm=$(echo "$smart_output" | awk -F': ' '/Rotation Rate:/ {print $2}' | xargs)
         case "$rpm" in
-            ""|"Solid State Device") rpm="SSD" ;;
-            *[!0-9]*) rpm=$(echo "$rpm" | grep -oE '[0-9]+' | head -1); [ -z "$rpm" ] && rpm="unknown" ;;
+            ""|"Solid State Device") rpm="0" ;;
+            *[!0-9]*) rpm=$(echo "$rpm" | grep -oE '[0-9]+' | head -1); [ -z "$rpm" ] && rpm="0" ;;
         esac
         
         # Extract manufacturer from model (usually just the first word)
