@@ -5,10 +5,22 @@
         "title": "Connect to UNAS Pro",
         "description": "Enter your UNAS Pro SSH credentials and MQTT broker details. Root access is required to install monitoring scripts.",
         "data": {
-          "host": "UNAS Host (IP address or hostname)",
+          "host": "Host (UNAS IP Address)",
           "username": "UNAS SSH username (root by default)",
           "password": "UNAS SSH password",
-          "mqtt_host": "MQTT Broker Host (IP address or hostname)",
+          "mqtt_host": "MQTT Broker Host (without port)",
+          "mqtt_user": "MQTT Username",
+          "mqtt_password": "MQTT Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure UNAS Pro",
+        "description": "Update your UNAS Pro connection settings. The integration will reconnect and redeploy scripts with the new configuration.",
+        "data": {
+          "host": "Host (UNAS IP Address)",
+          "username": "UNAS SSH username (root by default)",
+          "password": "UNAS SSH password",
+          "mqtt_host": "MQTT Broker Host (without port)",
           "mqtt_user": "MQTT Username",
           "mqtt_password": "MQTT Password"
         }
@@ -17,10 +29,22 @@
     "error": {
       "cannot_connect": "Failed to connect to UNAS Pro. Please check the IP address and credentials.",
       "timeout_connect": "Connection timed out. Please check that SSH is enabled on your UNAS Pro.",
+      "mqtt_cannot_connect": "Failed to connect to MQTT broker. Please verify the MQTT host IP address.",
+      "mqtt_invalid_auth": "MQTT authentication failed. Please check your MQTT username and password.",
+      "mqtt_timeout": "MQTT connection timed out. Please verify the broker is running and accessible.",
+      "mqtt_library_missing": "MQTT library not available. Please restart Home Assistant.",
       "unknown": "Unexpected error occurred. Please check the logs."
     },
     "abort": {
-      "already_configured": "This UNAS Pro is already configured."
+      "already_configured": "This UNAS Pro is already configured.",
+      "mqtt_required": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first, then try again.",
+      "reconfigure_successful": "Configuration updated successfully. The integration is reconnecting with the new settings."
+    }
+  },
+  "issues": {
+    "mqtt_missing": {
+      "title": "MQTT Integration Required",
+      "description": "The MQTT integration has been removed but is required for UNAS Pro to function. Please re-add the MQTT integration or remove the UNAS Pro integration."
     }
   }
 }

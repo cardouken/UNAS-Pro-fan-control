@@ -29,6 +29,10 @@
     "error": {
       "cannot_connect": "Failed to connect to UNAS Pro. Please check the IP address and credentials.",
       "timeout_connect": "Connection timed out. Please check that SSH is enabled on your UNAS Pro.",
+      "mqtt_cannot_connect": "Failed to connect to MQTT broker. Please verify the MQTT host IP address.",
+      "mqtt_invalid_auth": "MQTT authentication failed. Please check your MQTT username and password.",
+      "mqtt_timeout": "MQTT connection timed out. Please verify the broker is running and accessible.",
+      "mqtt_library_missing": "MQTT library not available. Please restart Home Assistant.",
       "unknown": "Unexpected error occurred. Please check the logs."
     },
     "abort": {
