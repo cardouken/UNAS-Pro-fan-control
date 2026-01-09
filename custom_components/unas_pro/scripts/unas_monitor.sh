@@ -270,7 +270,7 @@ monitor_system() {
         printf "%s: %3d (%d%%) (CPU %d°C) (HDD %s)\n" "$timestamp" "$raw" "$percent" "$cpu_temp" "$temp_str"
 
         # Publish CPU temperature and fan speed under main UNAS device
-        publish_mqtt_sensor "unas_cpu" "CPU Temperature" "$cpu_temp" "°C" "temperature" "$UNAS_DEVICE"
+        publish_mqtt_sensor "unas_cpu_temp" "CPU Temperature" "$cpu_temp" "°C" "temperature" "$UNAS_DEVICE"
         publish_mqtt_sensor "unas_fan_speed" "Fan Speed" "$raw" "PWM" "" "$UNAS_DEVICE"
         publish_mqtt_sensor "unas_fan_speed_percent" "Fan Speed Percentage" "$percent" "%" "" "$UNAS_DEVICE"
 

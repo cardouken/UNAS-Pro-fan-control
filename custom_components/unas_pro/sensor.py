@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 # sensor definitions: (mqtt_key, name, unit, device_class, state_class, icon)
 UNAS_SENSORS = [
     (
-        "unas_cpu",
+        "unas_cpu_temp",
         "CPU Temperature",
         UnitOfTemperature.CELSIUS,
         SensorDeviceClass.TEMPERATURE,

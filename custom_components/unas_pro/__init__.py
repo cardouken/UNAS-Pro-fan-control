@@ -137,8 +137,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     current_version = str(integration.version)
     last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
     scripts_installed = await ssh_manager.scripts_installed()
+    is_dev_version = '-dev' in current_version
 
-    if last_deploy_version != current_version or not scripts_installed:
+    if last_deploy_version != current_version or not scripts_installed or is_dev_version:
         await ssh_manager.deploy_scripts()
         new_data = dict(entry.data)
         new_data[LAST_DEPLOY_VERSION_KEY] = current_version
@@ -178,10 +179,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await ssh_manager.execute_command("rm -f /etc/systemd/system/unas_monitor.service")
             await ssh_manager.execute_command("rm -f /etc/systemd/system/fan_control.service")
             await ssh_manager.execute_command("rm -f /root/unas_monitor.sh")
+            await ssh_manager.execute_command("rm -f /root/unas_monitor.py")
             await ssh_manager.execute_command("rm -f /root/fan_control.sh")
             await ssh_manager.execute_command("rm -f /tmp/fan_control_last_pwm")
             await ssh_manager.execute_command("rm -f /tmp/fan_control_state")
             await ssh_manager.execute_command("systemctl daemon-reload")
+            await ssh_manager.execute_command("apt remove python3-paho-mqtt -y")
+            await ssh_manager.execute_command("apt remove mosquitto-clients -y")
             await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
             await ssh_manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
         except Exception as err:

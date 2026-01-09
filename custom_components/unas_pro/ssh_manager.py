@@ -7,6 +7,8 @@ from typing import Optional
 import aiofiles
 import asyncssh
 
+from .const import USE_PYTHON_MONITOR
+
 _LOGGER = logging.getLogger(__name__)
 
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
@@ -21,15 +23,15 @@ _DEFAULTS = {
 
 class SSHManager:
     def __init__(
-        self,
-        host: str,
-        username: str,
-        password: Optional[str] = None,
-        ssh_key: Optional[str] = None,
-        port: int = 22,
-        mqtt_host: Optional[str] = None,
-        mqtt_user: Optional[str] = None,
-        mqtt_password: Optional[str] = None,
+            self,
+            host: str,
+            username: str,
+            password: Optional[str] = None,
+            ssh_key: Optional[str] = None,
+            port: int = 22,
+            mqtt_host: Optional[str] = None,
+            mqtt_user: Optional[str] = None,
+            mqtt_password: Optional[str] = None,
     ) -> None:
         self.host = host
         self.username = username
@@ -75,9 +77,14 @@ class SSHManager:
         return result.stdout, result.stderr
 
     async def scripts_installed(self) -> bool:
-        stdout, _ = await self.execute_command(
-            "test -f /root/unas_monitor.sh && test -f /root/fan_control.sh && echo 'yes' || echo 'no'"
-        )
+        if USE_PYTHON_MONITOR:
+            stdout, _ = await self.execute_command(
+                "test -f /root/unas_monitor.py && test -f /root/fan_control.sh && echo 'yes' || echo 'no'"
+            )
+        else:
+            stdout, _ = await self.execute_command(
+                "test -f /root/unas_monitor.sh && test -f /root/fan_control.sh && echo 'yes' || echo 'no'"
+            )
         return stdout.strip() == "yes"
 
     async def service_running(self, service_name: str) -> bool:
@@ -103,10 +110,17 @@ class SSHManager:
         _LOGGER.info("Deploying scripts to UNAS...")
 
         try:
-            async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.sh", "r") as f:
-                monitor_script = await f.read()
-            async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.service", "r") as f:
-                monitor_service = await f.read()
+            if USE_PYTHON_MONITOR:
+                async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.py", "r") as f:
+                    monitor_script = await f.read()
+                monitor_path = "/root/unas_monitor.py"
+                service_exec = "/usr/bin/python3 /root/unas_monitor.py"
+            else:
+                async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.sh", "r") as f:
+                    monitor_script = await f.read()
+                monitor_path = "/root/unas_monitor.sh"
+                service_exec = "/root/unas_monitor.sh"
+
             async with aiofiles.open(SCRIPTS_DIR / "fan_control.sh", "r") as f:
                 fan_control_script = await f.read()
             async with aiofiles.open(SCRIPTS_DIR / "fan_control.service", "r") as f:
@@ -116,12 +130,33 @@ class SSHManager:
                 monitor_script = self._replace_mqtt_credentials(monitor_script)
                 fan_control_script = self._replace_mqtt_credentials(fan_control_script)
 
-            await self._upload_file("/root/unas_monitor.sh", monitor_script, executable=True)
-            await self._upload_file("/etc/systemd/system/unas_monitor.service", monitor_service)
+            await self._upload_file(monitor_path, monitor_script, executable=True)
+
+            monitor_service_content = f"""[Unit]
+Description=UNAS Monitor
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={service_exec}
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+"""
+            await self._upload_file("/etc/systemd/system/unas_monitor.service", monitor_service_content)
             await self._upload_file("/root/fan_control.sh", fan_control_script, executable=True)
             await self._upload_file("/etc/systemd/system/fan_control.service", fan_control_service)
 
             await self.execute_command("apt-get update && apt-get install -y mosquitto-clients")
+
+            if USE_PYTHON_MONITOR:
+                stdout, _ = await self.execute_command("dpkg -l python3-paho-mqtt 2>/dev/null | grep '^ii' || echo 'not_installed'")
+                if "not_installed" in stdout:
+                    _LOGGER.info("Installing python3-paho-mqtt on UNAS...")
+                    await self.execute_command("apt-get install -y python3-paho-mqtt")
+
             await self.execute_command("systemctl daemon-reload")
             await self.execute_command("systemctl enable unas_monitor")
             await self.execute_command("systemctl restart unas_monitor")
