@@ -19,10 +19,12 @@ Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integra
 ### UNAS Pro
 
 - CPU temperature & usage
+- Disk I/O (read/write throughput)
 - Memory usage & total
 - Fan speed (PWM & percentage)
 - Storage pool metrics
 - System info & uptime
+- SMB/NFS connections with client/share attributes
 
 ### Drives
 
@@ -83,6 +85,7 @@ Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integra
     - **MQTT Host**: Home Assistant IP (e.g., `192.168.1.111`)
     - **MQTT User**: Your Mosquitto username configured earlier in the add-on
     - **MQTT Password**: Your Mosquitto password configured earlier in the add-on
+    - **Polling Interval**: How often the integration should poll for metrics
 
 The integration will automatically:
 
