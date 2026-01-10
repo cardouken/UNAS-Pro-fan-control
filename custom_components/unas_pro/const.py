@@ -17,5 +17,3 @@ ATTR_SCRIPTS_INSTALLED = "scripts_installed"
 ATTR_SSH_CONNECTED = "ssh_connected"
 ATTR_MONITOR_RUNNING = "monitor_running"
 ATTR_FAN_CONTROL_RUNNING = "fan_control_running"
-
-USE_PYTHON_MONITOR = True
