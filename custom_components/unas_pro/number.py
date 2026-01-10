@@ -64,6 +64,7 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         self._attr_native_step = 1
         self._attr_native_unit_of_measurement = "%"
         self._attr_mode = NumberMode.SLIDER
+        self.entity_id = "number.unas_pro_fan_speed"
         self._current_value = None
         self._current_mode = None
         self._unsubscribe_speed = None
@@ -178,21 +179,19 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self.hass = hass
         self._key = key
-        self._attr_name = name  # use short name without prefix
+        self._attr_name = name
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_{key}"
         self._attr_native_min_value = min_val
         self._attr_native_max_value = max_val
         self._attr_native_step = 1
-        self._attr_native_value = None  # unknown until synced
+        self._attr_native_value = None
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_mode = NumberMode.BOX
+        self.entity_id = f"number.unas_pro_{name.lower().replace(' ', '_')}"
         self._default = default
         self._unsubscribe = None
-        self._is_fan_param = key in [
-            "min_fan",
-            "max_fan",
-        ]  # track if this is a fan speed param
+        self._is_fan_param = key in ["min_fan", "max_fan"]
 
         self._mqtt_topic = f"homeassistant/unas/fan_curve/{key}"
 

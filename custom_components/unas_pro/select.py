@@ -45,6 +45,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_mode"
         self._attr_icon = "mdi:fan-auto"
         self._attr_options = [MODE_UNAS_MANAGED, MODE_CUSTOM_CURVE, MODE_SET_SPEED]
+        self.entity_id = "select.unas_pro_fan_mode"
         self._current_option = None
         self._last_pwm = None
         self._unsubscribe = None

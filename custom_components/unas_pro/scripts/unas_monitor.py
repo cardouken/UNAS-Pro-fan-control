@@ -96,7 +96,7 @@ class UNASMonitor:
         data['os_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-core']).strip()
         data['drive_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-drive']).strip()
         data['cpu_usage'] = self.get_cpu_usage()
-        data['disk_read_mbps'], data['disk_write_mbps'] = self.get_disk_throughput()
+        data['disk_read'], data['disk_write'] = self.get_disk_throughput()
 
         with open('/proc/meminfo') as f:
             meminfo = {parts[0].rstrip(':'): int(parts[1]) for line in f if len(parts := line.split()) >= 2}
@@ -277,15 +277,15 @@ class UNASMonitor:
             for attr in data.get('ata_smart_attributes', {}).get('table', []):
                 name = attr.get('name', '').lower()
                 if name == 'power_on_hours':
-                    drive['power_hours'] = attr.get('raw', {}).get('value', 0)
+                    drive['power_on_hours'] = attr.get('raw', {}).get('value', 0)
                 elif name == 'reallocated_sector_ct':
                     drive['bad_sectors'] = attr.get('raw', {}).get('value', 0)
 
             if 'bad_sectors' not in drive:
                 drive['bad_sectors'] = 0
 
-            if 'power_hours' not in drive:
-                drive['power_hours'] = data.get('power_on_time', {}).get('hours', 0)
+            if 'power_on_hours' not in drive:
+                drive['power_on_hours'] = data.get('power_on_time', {}).get('hours', 0)
 
             size_bytes = data.get('user_capacity', {}).get('bytes', 0)
             drive['total_size'] = round(size_bytes / (1024 ** 4), 2)
@@ -451,7 +451,7 @@ class UNASMonitor:
             f"{system['fan_speed']} PWM ({system['fan_speed_percent']}%) | "
             f"CPU {system['cpu_temp']}°C | "
             f"HDD {temp_str} | "
-            f"R: {system['disk_read_mbps']} MB/s W: {system['disk_write_mbps']} MB/s"
+            f"R: {system['disk_read']} MB/s W: {system['disk_write']} MB/s"
         )
 
     def run(self):
