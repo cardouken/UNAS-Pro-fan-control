@@ -100,6 +100,22 @@ UNAS_SENSORS = [
         "mdi:upload",
     ),
     (
+        "unas_smb_connections",
+        "SMB Connections",
+        None,
+        None,
+        SensorStateClass.MEASUREMENT,
+        "mdi:server-network",
+    ),
+    (
+        "unas_nfs_mounts",
+        "NFS Mounts",
+        None,
+        None,
+        SensorStateClass.MEASUREMENT,
+        "mdi:folder-network",
+    ),
+    (
         "unas_uptime",
         "Uptime",
         UnitOfTime.SECONDS,
@@ -286,6 +302,11 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         self._attr_native_value = mqtt_data.get(self._mqtt_key)
+        
+        attr_key = f"{self._mqtt_key}_attributes"
+        if attr_key in mqtt_data:
+            self._attr_extra_state_attributes = {"clients": mqtt_data[attr_key]}
+        
         self.async_write_ha_state()
 
     @property

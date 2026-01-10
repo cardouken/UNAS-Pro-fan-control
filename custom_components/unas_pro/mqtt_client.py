@@ -48,19 +48,22 @@ class UNASMQTTClient:
     def _handle_status(self, msg) -> None:
         self._status = msg.payload
         _LOGGER.debug("UNAS status: %s", self._status)
-        
+
         if hasattr(self, "_coordinator") and self._coordinator:
             self.hass.async_create_task(self._coordinator.async_request_refresh())
 
     @callback
     def _handle_message(self, msg) -> None:
         parts = msg.topic.split("/")
-        
-        if len(parts) >= 4 and parts[1] == "sensor" and parts[-1] == "state":
+
+        if len(parts) >= 4 and parts[1] == "sensor":
             sensor_name = parts[2]
             if sensor_name.startswith("unas_"):
-                self._store_value(sensor_name, msg.payload)
-        
+                if parts[-1] == "state":
+                    self._store_value(sensor_name, msg.payload)
+                elif parts[-1] == "attributes":
+                    self._store_attributes(sensor_name, msg.payload)
+
         elif len(parts) == 4 and parts[1] == "unas" and parts[2] == "fan_curve":
             param_name = parts[3]
             self._store_value(f"fan_curve_{param_name}", msg.payload)
@@ -77,18 +80,29 @@ class UNASMQTTClient:
 
         if hasattr(self, "_coordinator") and self._coordinator:
             self.hass.async_create_task(self._coordinator.async_request_refresh())
-    
+
+    def _store_attributes(self, key: str, payload: str) -> None:
+        import json
+        try:
+            self._data[f"{key}_attributes"] = json.loads(payload)
+            self._last_update = datetime.now()
+
+            if hasattr(self, "_coordinator") and self._coordinator:
+                self.hass.async_create_task(self._coordinator.async_request_refresh())
+        except json.JSONDecodeError:
+            _LOGGER.warning("Failed to parse JSON attributes for %s", key)
+
     def is_available(self) -> bool:
         if self._status == "offline":
             return False
-        
+
         if self._last_update is None:
             return False
-        
+
         time_since_update = (datetime.now() - self._last_update).total_seconds()
         if time_since_update > 120:
             return False
-        
+
         return True
 
     def get_data(self) -> dict[str, Any]:

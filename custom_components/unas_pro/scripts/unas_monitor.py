@@ -43,7 +43,7 @@ class UNASMonitor:
         self.mqtt.connect(MQTT_HOST, 1883, 60)
         self.mqtt.loop_start()
         time.sleep(2)
-        
+
         self.monitor_interval = DEFAULT_MONITOR_INTERVAL
         self.mqtt.subscribe(MONITOR_INTERVAL_TOPIC)
         self.mqtt.publish("homeassistant/unas/status", "online", retain=True)
@@ -325,6 +325,80 @@ class UNASMonitor:
 
         return pools
 
+    def get_smb_connections(self):
+        output = self.run_cmd(['smbstatus', '-b'])
+        lines = output.strip().split('\n')
+
+        connections = {}
+        for line in lines[3:]:
+            if not line.strip() or line.startswith('---'):
+                continue
+
+            parts = line.split()
+            if len(parts) < 6:
+                continue
+
+            pid = parts[0]
+            username = parts[1]
+            ip = parts[3].split('(')[1].split(':')[0] if '(' in parts[3] else parts[3]
+
+            connections[pid] = {
+                'username': username,
+                'ip': ip
+            }
+
+        return connections
+
+    def get_smb_shares(self):
+        output = self.run_cmd(['smbstatus', '-S'])
+        lines = output.strip().split('\n')
+
+        shares = []
+        for line in lines[2:]:
+            if not line.strip() or line.startswith('---'):
+                continue
+
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+
+            shares.append({
+                'share': parts[0],
+                'pid': parts[1],
+                'ip': parts[2]
+            })
+
+        return shares
+
+    def get_nfs_mounts(self):
+        output = self.run_cmd(['showmount', '-a'])
+        lines = output.strip().split('\n')[1:]
+
+        mounts = []
+        for line in lines:
+            if not line.strip():
+                continue
+
+            parts = line.split(':')
+            if len(parts) != 2:
+                continue
+
+            ip = parts[0]
+            path = parts[1]
+
+            share_match = path.split('/.srv/.unifi-drive/')
+            if len(share_match) == 2:
+                share = share_match[1].split('/')[0]
+            else:
+                share = 'unknown'
+
+            mounts.append({
+                'ip': ip,
+                'share': share
+            })
+
+        return mounts
+
     def collect_and_publish(self):
         system = self.get_system_metrics()
         for key, value in system.items():
@@ -341,6 +415,34 @@ class UNASMonitor:
             pool_num = pool.pop('pool')
             for key, value in pool.items():
                 self.publish(f"unas_pool{pool_num}_{key}", value)
+
+        smb_connections = self.get_smb_connections()
+        smb_shares = self.get_smb_shares()
+
+        smb_data = {
+            'count': len(smb_shares),
+            'clients': []
+        }
+
+        for share in smb_shares:
+            conn = smb_connections.get(share['pid'], {})
+            smb_data['clients'].append({
+                'username': conn.get('username', 'unknown'),
+                'ip': share['ip'],
+                'share': share['share']
+            })
+
+        self.mqtt.publish("homeassistant/sensor/unas_smb_connections/state", str(smb_data['count']), retain=True)
+        self.mqtt.publish("homeassistant/sensor/unas_smb_connections/attributes", json.dumps(smb_data['clients']), retain=True)
+
+        nfs_mounts = self.get_nfs_mounts()
+        nfs_data = {
+            'count': len(nfs_mounts),
+            'clients': nfs_mounts
+        }
+
+        self.mqtt.publish("homeassistant/sensor/unas_nfs_mounts/state", str(nfs_data['count']), retain=True)
+        self.mqtt.publish("homeassistant/sensor/unas_nfs_mounts/attributes", json.dumps(nfs_data['clients']), retain=True)
 
         temps = [d.get('temperature', 0) for d in drives if 'temperature' in d]
         temp_str = ', '.join(f"{t}°C" for t in temps) if temps else "no drives"
