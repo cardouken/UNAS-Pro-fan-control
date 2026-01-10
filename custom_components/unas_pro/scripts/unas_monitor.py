@@ -52,6 +52,9 @@ class UNASMonitor:
         self.known_drives = set()
         self.prev_cpu_idle = None
         self.prev_cpu_total = None
+        self.prev_disk_read = None
+        self.prev_disk_write = None
+        self.prev_time = None
 
     def _on_connect(self, _client, _userdata, _flags, reason_code, _properties):
         if reason_code == 0:
@@ -93,6 +96,7 @@ class UNASMonitor:
         data['os_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-core']).strip()
         data['drive_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-drive']).strip()
         data['cpu_usage'] = self.get_cpu_usage()
+        data['disk_read_mbps'], data['disk_write_mbps'] = self.get_disk_throughput()
 
         with open('/proc/meminfo') as f:
             meminfo = {parts[0].rstrip(':'): int(parts[1]) for line in f if len(parts := line.split()) >= 2}
@@ -159,6 +163,61 @@ class UNASMonitor:
             return 0
 
         return int(100 * (1 - delta_idle / delta_total))
+
+    def get_disk_throughput(self):
+        def read_diskstats():
+            read_sectors = 0
+            write_sectors = 0
+            with open('/proc/diskstats') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) < 10:
+                        continue
+                    device = parts[2]
+                    if device.startswith('sd') and len(device) == 3:
+                        read_sectors += int(parts[5])
+                        write_sectors += int(parts[9])
+            return read_sectors, write_sectors
+
+        # handle script startup/restart to avoid reporting 0mbps usage to HA
+        if self.prev_disk_read is None:
+            read_start, write_start = read_diskstats()
+            time_start = time.time()
+            time.sleep(1.0)
+            read_end, write_end = read_diskstats()
+            time_end = time.time()
+
+            self.prev_disk_read = read_end
+            self.prev_disk_write = write_end
+            self.prev_time = time_end
+
+            time_delta = time_end - time_start
+            read_bytes = (read_end - read_start) * 512
+            write_bytes = (write_end - write_start) * 512
+
+            read_mbps = (read_bytes / time_delta) / (1024 * 1024)
+            write_mbps = (write_bytes / time_delta) / (1024 * 1024)
+
+            return round(read_mbps, 2), round(write_mbps, 2)
+
+        read_now, write_now = read_diskstats()
+        time_now = time.time()
+
+        time_delta = time_now - self.prev_time
+        read_bytes = (read_now - self.prev_disk_read) * 512
+        write_bytes = (write_now - self.prev_disk_write) * 512
+
+        self.prev_disk_read = read_now
+        self.prev_disk_write = write_now
+        self.prev_time = time_now
+
+        if time_delta <= 0:
+            return 0.0, 0.0
+
+        read_mbps = (read_bytes / time_delta) / (1024 * 1024)
+        write_mbps = (write_bytes / time_delta) / (1024 * 1024)
+
+        return round(read_mbps, 2), round(write_mbps, 2)
 
     def get_bay_number(self, device):
         if device in self.bay_cache:
@@ -289,7 +348,8 @@ class UNASMonitor:
         logger.info(
             f"{system['fan_speed']} PWM ({system['fan_speed_percent']}%) | "
             f"CPU {system['cpu_temp']}°C | "
-            f"HDD {temp_str}"
+            f"HDD {temp_str} | "
+            f"R: {system['disk_read_mbps']} MB/s W: {system['disk_write_mbps']} MB/s"
         )
 
     def run(self):

@@ -84,6 +84,22 @@ UNAS_SENSORS = [
         None,
     ),
     (
+        "unas_disk_read_mbps",
+        "Disk Read",
+        "MB/s",
+        SensorDeviceClass.DATA_RATE,
+        SensorStateClass.MEASUREMENT,
+        "mdi:download",
+    ),
+    (
+        "unas_disk_write_mbps",
+        "Disk Write",
+        "MB/s",
+        SensorDeviceClass.DATA_RATE,
+        SensorStateClass.MEASUREMENT,
+        "mdi:upload",
+    ),
+    (
         "unas_uptime",
         "Uptime",
         UnitOfTime.SECONDS,
