@@ -26,7 +26,7 @@ async def async_setup_entry(
 class UNASReinstallScriptsButton(CoordinatorEntity, ButtonEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_name = "UNAS Pro Reinstall Scripts"
+        self._attr_name = "Reinstall Scripts"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_reinstall_scripts"
         self._attr_icon = "mdi:cog-refresh"
         self._attr_device_info = DeviceInfo(

@@ -41,7 +41,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator, hass: HomeAssistant) -> None:
         super().__init__(coordinator)
         self.hass = hass
-        self._attr_name = "UNAS Fan Mode"
+        self._attr_name = "Fan Mode"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_mode"
         self._attr_icon = "mdi:fan-auto"
         self._attr_options = [MODE_UNAS_MANAGED, MODE_CUSTOM_CURVE, MODE_SET_SPEED]

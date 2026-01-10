@@ -220,8 +220,7 @@ async def _discover_and_add_drive_sensors(
     for bay_num in sorted(new_bays):
         for sensor_suffix, name, unit, device_class, state_class, icon in DRIVE_SENSORS:
             mqtt_key = f"unas_hdd_{bay_num}_{sensor_suffix}"
-            full_name = f"UNAS HDD {bay_num} {name}"
-            entities.append(UNASDriveSensor(coordinator, mqtt_key, full_name, bay_num, unit, device_class, state_class, icon))
+            entities.append(UNASDriveSensor(coordinator, mqtt_key, name, bay_num, unit, device_class, state_class, icon))
 
     if entities:
         async_add_entities(entities)
@@ -268,7 +267,7 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
-        self._attr_name = f"UNAS Pro {name}"
+        self._attr_name = name
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{mqtt_key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
@@ -303,7 +302,7 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
 class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_name = "UNAS Fan Curve"
+        self._attr_name = "Fan Curve"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_viz"
         self._attr_icon = "mdi:chart-line"
 

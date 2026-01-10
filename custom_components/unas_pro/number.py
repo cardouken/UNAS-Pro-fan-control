@@ -56,7 +56,7 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
     ) -> None:
         super().__init__(coordinator)
         self.hass = hass
-        self._attr_name = "UNAS Fan Speed"
+        self._attr_name = "Fan Speed"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_speed_control"
         self._attr_icon = "mdi:fan"
         self._attr_native_min_value = 0

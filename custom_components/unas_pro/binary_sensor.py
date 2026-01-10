@@ -28,7 +28,7 @@ async def async_setup_entry(
 class UNASScriptsInstalledSensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_name = "UNAS Pro Scripts Installed"
+        self._attr_name = "Scripts Installed"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_scripts_installed"
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
         self._attr_device_info = DeviceInfo(
@@ -46,7 +46,7 @@ class UNASScriptsInstalledSensor(CoordinatorEntity, BinarySensorEntity):
 class UNASMonitorRunningSensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_name = "UNAS Pro Monitor Service"
+        self._attr_name = "Monitor Service"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_monitor_running"
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
         self._attr_device_info = DeviceInfo(
@@ -64,7 +64,7 @@ class UNASMonitorRunningSensor(CoordinatorEntity, BinarySensorEntity):
 class UNASFanControlRunningSensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_name = "UNAS Pro Fan Control Service"
+        self._attr_name = "Fan Control Service"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_control_running"
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
         self._attr_device_info = DeviceInfo(
