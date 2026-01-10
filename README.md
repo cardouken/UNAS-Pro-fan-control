@@ -162,6 +162,10 @@ Common issues:
 Scripts are reinstalled automatically. If needed, manually reinstall via the "Reinstall Scripts" button on the device
 page.
 
+### Removing integration
+
+Removing the integration removes all scripts, services, and packages installed by the integration from the UNAS, restoring it to stock.
+
 ## Credits
 
 - **Fan control concept**: [hoxxep/UNAS-Pro-fan-control](https://github.com/hoxxep/UNAS-Pro-fan-control)
