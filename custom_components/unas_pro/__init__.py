@@ -16,6 +16,7 @@ from .const import (
     CONF_MQTT_HOST,
     CONF_MQTT_USER,
     CONF_MQTT_PASSWORD,
+    CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
 )
 from .ssh_manager import SSHManager
@@ -161,6 +162,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await mqtt_client_instance.async_subscribe()
     await _cleanup_old_mqtt_configs_on_upgrade(hass, entry)
+    
+    from homeassistant.components import mqtt
+    scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    await mqtt.async_publish(
+        hass,
+        "homeassistant/unas/monitor_interval",
+        str(scan_interval),
+        qos=0,
+        retain=True,
+    )
 
     return True
 
@@ -215,7 +226,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+            update_interval=timedelta(seconds=entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
         )
 
     async def _async_update_data(self):

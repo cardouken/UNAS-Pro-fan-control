@@ -6,6 +6,8 @@ from typing import Any
 
 import asyncssh
 import voluptuous as vol
+from homeassistant.core import callback
+from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig, NumberSelectorMode
 
 from homeassistant import config_entries
 from homeassistant.components import mqtt
@@ -15,9 +17,13 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     DOMAIN,
     DEFAULT_USERNAME,
+    DEFAULT_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+    MAX_SCAN_INTERVAL,
     CONF_MQTT_HOST,
     CONF_MQTT_USER,
     CONF_MQTT_PASSWORD,
+    CONF_SCAN_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,12 +36,20 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_MQTT_HOST,): str,
         vol.Required(CONF_MQTT_USER): str,
         vol.Required(CONF_MQTT_PASSWORD): str,
+        vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): NumberSelector(
+            NumberSelectorConfig(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL, mode=NumberSelectorMode.BOX)
+        ),
     }
 )
 
 
 class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return UNASProOptionsFlow()
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
@@ -59,6 +73,9 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_MQTT_HOST, default=entry.data.get(CONF_MQTT_HOST)): str,
                 vol.Required(CONF_MQTT_USER, default=entry.data.get(CONF_MQTT_USER)): str,
                 vol.Required(CONF_MQTT_PASSWORD, default=entry.data.get(CONF_MQTT_PASSWORD)): str,
+                vol.Optional(CONF_SCAN_INTERVAL, default=entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): NumberSelector(
+                    NumberSelectorConfig(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL, mode=NumberSelectorMode.BOX)
+                ),
             }
         )
 
@@ -147,4 +164,37 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as e:
             _LOGGER.debug("MQTT test failed: %s", e)
             return "mqtt_cannot_connect"
+
+
+class UNASProOptionsFlow(config_entries.OptionsFlow):
+    async def async_step_init(self, user_input):
+        if user_input is not None:
+            from homeassistant.components import mqtt
+            
+            new_interval = user_input[CONF_SCAN_INTERVAL]
+            await mqtt.async_publish(
+                self.hass,
+                "homeassistant/unas/monitor_interval",
+                str(new_interval),
+                qos=0,
+                retain=True,
+            )
+            
+            new_data = dict(self.config_entry.data)
+            new_data[CONF_SCAN_INTERVAL] = new_interval
+            self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_create_entry(title="", data={})
+
+        options_schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_SCAN_INTERVAL,
+                    default=self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+                ): NumberSelector(NumberSelectorConfig(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL, mode=NumberSelectorMode.BOX)),
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=options_schema)
+
 

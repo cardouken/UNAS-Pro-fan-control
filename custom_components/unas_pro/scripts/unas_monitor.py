@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 MQTT_HOST = "192.168.1.111"
 MQTT_USER = "homeassistant"
 MQTT_PASS = "unas_password_123"
-MONITOR_INTERVAL = 30
+DEFAULT_MONITOR_INTERVAL = 30
+MONITOR_INTERVAL_TOPIC = "homeassistant/unas/monitor_interval"
 
 ATA_TO_BAY = {
     "1": "6",
@@ -32,22 +33,46 @@ ATA_TO_BAY = {
 
 class UNASMonitor:
     def __init__(self):
-        self.mqtt = mqtt.Client()
+        self.mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.mqtt.username_pw_set(MQTT_USER, MQTT_PASS)
-        self.mqtt.on_connect = lambda c, u, f, rc: logger.info("MQTT connected" if rc == 0 else f"MQTT failed: {rc}")
-        self.mqtt.on_disconnect = lambda c, u, rc: logger.warning("MQTT disconnected") if rc != 0 else None
+        self.mqtt.on_connect = self._on_connect
+        self.mqtt.on_disconnect = self._on_disconnect
+        self.mqtt.on_message = self._on_message
 
         self.mqtt.will_set("homeassistant/unas/status", "offline", retain=True)
         self.mqtt.connect(MQTT_HOST, 1883, 60)
         self.mqtt.loop_start()
         time.sleep(2)
+        
+        self.monitor_interval = DEFAULT_MONITOR_INTERVAL
+        self.mqtt.subscribe(MONITOR_INTERVAL_TOPIC)
         self.mqtt.publish("homeassistant/unas/status", "online", retain=True)
 
         self.bay_cache = {}
         self.known_drives = set()
-
         self.prev_cpu_idle = None
         self.prev_cpu_total = None
+
+    def _on_connect(self, _client, _userdata, _flags, reason_code, _properties):
+        if reason_code == 0:
+            logger.info("MQTT connected")
+        else:
+            logger.error(f"MQTT failed: {reason_code}")
+
+    def _on_disconnect(self, _client, _userdata, _flags, reason_code, _properties):
+        if reason_code != 0:
+            logger.warning("MQTT disconnected")
+
+    def _on_message(self, _client, _userdata, msg):
+        if msg.topic == MONITOR_INTERVAL_TOPIC:
+            try:
+                new_interval = int(float(msg.payload.decode()))
+                if 5 <= new_interval <= 60:
+                    old = self.monitor_interval
+                    self.monitor_interval = new_interval
+                    logger.info(f"Monitor interval: {old}s -> {new_interval}s")
+            except (ValueError, TypeError):
+                pass
 
     def publish(self, topic, value):
         self.mqtt.publish(f"homeassistant/sensor/{topic}/state", str(value), retain=True)
@@ -268,7 +293,7 @@ class UNASMonitor:
         )
 
     def run(self):
-        logger.info("UNAS monitor started")
+        logger.info(f"UNAS monitor started (interval: {self.monitor_interval}s)")
 
         while True:
             try:
@@ -276,7 +301,7 @@ class UNASMonitor:
             except Exception as e:
                 logger.error(f"Error: {e}")
 
-            time.sleep(MONITOR_INTERVAL)
+            time.sleep(self.monitor_interval)
 
 
 if __name__ == '__main__':

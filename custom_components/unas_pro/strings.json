@@ -10,7 +10,8 @@
           "password": "UNAS SSH password",
           "mqtt_host": "MQTT Broker Host (without port)",
           "mqtt_user": "MQTT Username",
-          "mqtt_password": "MQTT Password"
+          "mqtt_password": "MQTT Password",
+          "scan_interval": "Polling Interval (seconds, 5-60)"
         }
       },
       "reconfigure": {
@@ -22,7 +23,8 @@
           "password": "UNAS SSH password",
           "mqtt_host": "MQTT Broker Host (without port)",
           "mqtt_user": "MQTT Username",
-          "mqtt_password": "MQTT Password"
+          "mqtt_password": "MQTT Password",
+          "scan_interval": "Polling Interval (seconds, 5-60)"
         }
       }
     },
@@ -39,6 +41,17 @@
       "already_configured": "This UNAS Pro is already configured.",
       "mqtt_required": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first, then try again.",
       "reconfigure_successful": "Configuration updated successfully. The integration is reconnecting with the new settings."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "UNAS Pro Options",
+        "description": "Configure sensor polling interval. Lower values provide more frequent updates but may increase system load.",
+        "data": {
+          "scan_interval": "Polling Interval (seconds, 5-60)"
+        }
+      }
     }
   },
   "issues": {

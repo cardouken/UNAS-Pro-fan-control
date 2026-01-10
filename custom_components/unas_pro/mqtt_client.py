@@ -73,7 +73,7 @@ class UNASMQTTClient:
 
         self._data[key] = value
         self._last_update = datetime.now()
-        _LOGGER.debug("MQTT: %s = %s", key, value)
+        # _LOGGER.debug("MQTT: %s = %s", key, value)
 
         if hasattr(self, "_coordinator") and self._coordinator:
             self.hass.async_create_task(self._coordinator.async_request_refresh())
