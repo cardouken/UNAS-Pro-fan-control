@@ -17,7 +17,8 @@ Monitoring and fan control for UniFi UNAS with native Home Assistant integration
 <details>
 <summary><strong>Help confirm device support!</strong></summary>
 
-If you own a UNAS Pro 8, UNAS Pro 4, UNAS 4, or UNAS 2, you can help confirm drive bay mappings by running this command on your UNAS via SSH:
+If you own a UNAS Pro 8, UNAS Pro 4, UNAS 4, or UNAS 2, you can help confirm drive bay mappings by running this command
+on your UNAS via SSH:
 
 ```bash
 for dev in /dev/sd?; do
@@ -29,6 +30,7 @@ done
 ```
 
 **Example output:**
+
 ```
 Device: /dev/sda | ATA Port: 1 | Serial: ZR5FFXXX | Model: ST18000NM001J-2TV113
 Device: /dev/sdb | ATA Port: 4 | Serial: ZR51DXXX | Model: ST18000NM000J-2TV103
@@ -36,11 +38,13 @@ Device: /dev/sdc | ATA Port: 5 | Serial: ZR5FHXXX | Model: ST18000NM001J-2TV113
 ```
 
 Then check the UniFi Drive UI and match the serial numbers to physical bay numbers. For example:
+
 - `/dev/sda` - ATA Port 1 - Bay 6
 - `/dev/sdb` - ATA Port 4 - Bay 3
 - `/dev/sdc` - ATA Port 5 - Bay 5
 
-Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unifi-unas/issues) with your results to help improve device support!
+Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unifi-unas/issues) with your results to help
+improve device support!
 
 </details>
 
@@ -51,6 +55,11 @@ Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unifi-un
 - **Fan Control** - Three modes with custom temperature curves
 - **Auto-Recovery** - Survives firmware updates
 - **Native Integration** - Proper HA devices and entities
+
+## Known Limitations
+
+- **Single Device Only** - Currently supports one UNAS device per Home Assistant instance. Multi-device support is
+  planned in an upcoming release as soon as possible.
 
 ## Included metrics
 
@@ -203,7 +212,8 @@ page.
 
 ### Removing integration
 
-Removing the integration removes all scripts, services, and packages installed by the integration from the UNAS, restoring it to stock.
+Removing the integration removes all scripts, services, and packages installed by the integration from the UNAS,
+restoring it to stock.
 
 ## Credits
 
