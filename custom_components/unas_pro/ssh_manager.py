@@ -13,9 +13,9 @@ SCRIPTS_DIR = Path(__file__).parent / "scripts"
 
 # Default values used in script templates
 _DEFAULTS = {
-    "MQTT_HOST": "192.168.1.111",
-    "MQTT_USER": "homeassistant",
-    "MQTT_PASS": "unas_password_123",
+    "MQTT_HOST": "192.168.3.444",
+    "MQTT_USER": "username",
+    "MQTT_PASS": "password",
 }
 
 
@@ -95,9 +95,9 @@ class SSHManager:
 
     def _replace_mqtt_credentials(self, script: str) -> str:
         replacements = {
-            f'MQTT_HOST="{_DEFAULTS["MQTT_HOST"]}"': f'MQTT_HOST="{self.mqtt_host}"',
-            f'MQTT_USER="{_DEFAULTS["MQTT_USER"]}"': f'MQTT_USER="{self.mqtt_user}"',
-            f'MQTT_PASS="{_DEFAULTS["MQTT_PASS"]}"': f'MQTT_PASS="{self.mqtt_password}"',
+            f'MQTT_HOST = "{_DEFAULTS["MQTT_HOST"]}"': f'MQTT_HOST = "{self.mqtt_host}"',
+            f'MQTT_USER = "{_DEFAULTS["MQTT_USER"]}"': f'MQTT_USER = "{self.mqtt_user}"',
+            f'MQTT_PASS = "{_DEFAULTS["MQTT_PASS"]}"': f'MQTT_PASS = "{self.mqtt_password}"',
         }
 
         for old, new in replacements.items():
