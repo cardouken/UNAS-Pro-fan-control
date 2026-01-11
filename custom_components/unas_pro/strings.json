@@ -11,7 +11,11 @@
           "mqtt_host": "MQTT Broker Host (without port)",
           "mqtt_user": "MQTT Username",
           "mqtt_password": "MQTT Password",
+          "device_model": "Device Model",
           "scan_interval": "Polling Interval (seconds, 5-60)"
+        },
+        "data_description": {
+          "device_model": "Select your UNAS model"
         }
       },
       "reconfigure": {
@@ -24,7 +28,11 @@
           "mqtt_host": "MQTT Broker Host (without port)",
           "mqtt_user": "MQTT Username",
           "mqtt_password": "MQTT Password",
+          "device_model": "Device Model",
           "scan_interval": "Polling Interval (seconds, 5-60)"
+        },
+        "data_description": {
+          "device_model": "WARNING: Changing the device model requires deleting and re-adding the integration to update drive entities."
         }
       }
     },
@@ -35,6 +43,7 @@
       "mqtt_invalid_auth": "MQTT authentication failed. Please check your MQTT username and password.",
       "mqtt_timeout": "MQTT connection timed out. Please verify the broker is running and accessible.",
       "mqtt_library_missing": "MQTT library not available. Please restart Home Assistant.",
+      "model_changed": "Device model cannot be changed during reconfiguration. Please delete and re-add the integration to change the device model.",
       "unknown": "Unexpected error occurred. Please check the logs."
     },
     "abort": {

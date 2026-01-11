@@ -20,15 +20,50 @@ MQTT_PASS = "REPLACE_ME"
 DEFAULT_MONITOR_INTERVAL = 30
 MONITOR_INTERVAL_TOPIC = "homeassistant/unas/monitor_interval"
 
-ATA_TO_BAY = {
-    "1": "6",
-    "3": "7",
-    "4": "3",
-    "5": "5",
-    "6": "2",
-    "7": "4",
-    "8": "1"
+DEVICE_MODEL = "UNAS_PRO"
+
+BAY_MAPPINGS = {
+    "UNAS_PRO": {
+        "1": "6",
+        "3": "7",
+        "4": "3",
+        "5": "5",
+        "6": "2",
+        "7": "4",
+        "8": "1"
+    },
+    "UNAS_PRO_8": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+        "5": "5",
+        "6": "6",
+        "7": "7", # unconfirmed, assuming based on confirmed 1-6
+        "8": "8" # unconfirmed, assuming based on confirmed 1-6
+    },
+    # Pro 4 all unconfirmed, just assumed defaults to allow drive discovery even if mapped incorrectly
+    "UNAS_PRO_4": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+    },
+    # UNAS 4 all unconfirmed, just assumed defaults to allow drive discovery even if mapped incorrectly
+    "UNAS_4": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+    },
+    # UNAS 2 all unconfirmed, just assumed defaults to allow drive discovery even if mapped incorrectly
+    "UNAS_2": {
+        "1": "1",
+        "2": "2"
+    }
 }
+
+ATA_TO_BAY = BAY_MAPPINGS.get(DEVICE_MODEL)
 
 
 class UNASMonitor:

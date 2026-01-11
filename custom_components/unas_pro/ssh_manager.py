@@ -98,9 +98,9 @@ class SSHManager:
 
         return script
 
-    async def deploy_scripts(self) -> None:
+    async def deploy_scripts(self, device_model: str) -> None:
         await self.connect()
-        _LOGGER.info("Deploying scripts to UNAS...")
+        _LOGGER.info("Deploying scripts for device model: %s", device_model)
 
         try:
             async with aiofiles.open(SCRIPTS_DIR / "unas_monitor.py", "r") as f:
@@ -115,6 +115,8 @@ class SSHManager:
             if self.mqtt_host and self.mqtt_user and self.mqtt_password:
                 monitor_script = self._replace_mqtt_credentials(monitor_script)
                 fan_control_script = self._replace_mqtt_credentials(fan_control_script)
+
+            monitor_script = monitor_script.replace('DEVICE_MODEL = "UNAS_PRO"', f'DEVICE_MODEL = "{device_model}"')
 
             await self._upload_file("/root/unas_monitor.py", monitor_script, executable=True)
             await self._upload_file("/etc/systemd/system/unas_monitor.service", monitor_service)

@@ -4,7 +4,45 @@
 [![GitHub Release](https://img.shields.io/github/release/cardouken/homeassistant-unas-pro.svg)](https://github.com/cardouken/homeassistant-unas-pro/releases)
 [![License](https://img.shields.io/github/license/cardouken/homeassistant-unas-pro.svg)](LICENSE.md)
 
-Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integration.
+Monitoring and fan control for UniFi UNAS with native Home Assistant integration.
+
+## Supported Devices
+
+- **UNAS Pro** – Fully supported
+- **UNAS Pro 8** – Fully supported (bays 7-8 possibly not mapped correctly, assumed sequential)
+- **UNAS Pro 4** – Unconfirmed, but very likely supported, bays possibly not mapped correctly
+- **UNAS 4** – Unconfirmed
+- **UNAS 2** – Unconfirmed
+
+<details>
+<summary><strong>Help confirm device support!</strong></summary>
+
+If you own a UNAS Pro 8, UNAS Pro 4, UNAS 4, or UNAS 2, you can help confirm drive bay mappings by running this command on your UNAS via SSH:
+
+```bash
+for dev in /dev/sd?; do
+    ata_port=$(udevadm info -q path -n "$dev" | grep -oP 'ata\K[0-9]+')
+    serial=$(smartctl -i "$dev" 2>/dev/null | grep 'Serial Number' | awk '{print $NF}')
+    model=$(smartctl -i "$dev" 2>/dev/null | grep 'Device Model' | awk '{$1=$2=""; print $0}' | xargs)
+    echo "Device: $dev | ATA Port: $ata_port | Serial: $serial | Model: $model"
+done
+```
+
+**Example output:**
+```
+Device: /dev/sda | ATA Port: 1 | Serial: ZR5FFXXX | Model: ST18000NM001J-2TV113
+Device: /dev/sdb | ATA Port: 4 | Serial: ZR51DXXX | Model: ST18000NM000J-2TV103
+Device: /dev/sdc | ATA Port: 5 | Serial: ZR5FHXXX | Model: ST18000NM001J-2TV113
+```
+
+Then check the UniFi Drive UI and match the serial numbers to physical bay numbers. For example:
+- `/dev/sda` - ATA Port 1 - Bay 6
+- `/dev/sdb` - ATA Port 4 - Bay 3
+- `/dev/sdc` - ATA Port 5 - Bay 5
+
+Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unas-pro/issues) with your results to help improve device support!
+
+</details>
 
 ## Features
 
@@ -56,7 +94,7 @@ Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integra
     - Configure login credentials under Mosquitto broker add-on → Configuration → Options → Logins
     - **Note**: You can use any MQTT broker, but Mosquitto add-on is easiest
 
-3. **SSH Access to UNAS Pro**
+3. **SSH Access to UNAS**
     - Enable SSH access in UniFi Drive via Settings → Control Plane → Console → check "SSH" and configure password
 
 ### Install Integration
@@ -87,6 +125,7 @@ Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integra
     - **MQTT Host**: Home Assistant IP (e.g., `192.168.1.111`)
     - **MQTT User**: Your Mosquitto username configured earlier in the add-on
     - **MQTT Password**: Your Mosquitto password configured earlier in the add-on
+    - **Device Model**: Select your UNAS model from the dropdown
     - **Polling Interval**: How often the integration should poll for metrics
 
 The integration will automatically:

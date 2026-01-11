@@ -17,7 +17,9 @@ from .const import (
     CONF_MQTT_USER,
     CONF_MQTT_PASSWORD,
     CONF_SCAN_INTERVAL,
+    CONF_DEVICE_MODEL,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_DEVICE_MODEL,
 )
 from .ssh_manager import SSHManager
 from .mqtt_client import UNASMQTTClient
@@ -35,6 +37,19 @@ PLATFORMS: list[Platform] = [
 LAST_CLEANUP_VERSION_KEY = "last_cleanup_version"
 LAST_DEPLOY_VERSION_KEY = "last_deploy_version"
 PERFORM_MQTT_CLEANUP = True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if entry.version == 1:
+        new_data = {**entry.data}
+        if CONF_DEVICE_MODEL not in new_data:
+            new_data[CONF_DEVICE_MODEL] = DEFAULT_DEVICE_MODEL
+            _LOGGER.info("Migrated config entry to version 2, added device model: %s", DEFAULT_DEVICE_MODEL)
+        
+        hass.config_entries.async_update_entry(entry, data=new_data, version=2)
+        return True
+    
+    return True
 
 
 async def _cleanup_old_mqtt_configs_on_upgrade(
@@ -139,9 +154,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     last_deploy_version = entry.data.get(LAST_DEPLOY_VERSION_KEY)
     scripts_installed = await manager.scripts_installed()
     is_dev_version = '-dev' in current_version
+    device_model = entry.data[CONF_DEVICE_MODEL]
 
     if last_deploy_version != current_version or not scripts_installed or is_dev_version:
-        await manager.deploy_scripts()
+        await manager.deploy_scripts(device_model)
         new_data = dict(entry.data)
         new_data[LAST_DEPLOY_VERSION_KEY] = current_version
         hass.config_entries.async_update_entry(entry, data=new_data)
@@ -259,7 +275,8 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
 
             if not scripts_installed:
                 _LOGGER.warning("Scripts missing, reinstalling...")
-                await self.ssh_manager.deploy_scripts()
+                device_model = self.entry.data[CONF_DEVICE_MODEL]
+                await self.ssh_manager.deploy_scripts(device_model)
 
             monitor_running = await self.ssh_manager.service_running("unas_monitor")
             fan_control_running = await self.ssh_manager.service_running("fan_control")
@@ -284,5 +301,6 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         return data
 
     async def async_reinstall_scripts(self) -> None:
-        await self.ssh_manager.deploy_scripts()
+        device_model = self.entry.data[CONF_DEVICE_MODEL]
+        await self.ssh_manager.deploy_scripts(device_model)
         await self.async_request_refresh()
