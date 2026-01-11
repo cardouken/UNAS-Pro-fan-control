@@ -94,6 +94,9 @@ class UNASMonitor:
 
         self.bay_cache = {}
         self.known_drives = set()
+        self.previous_drive_map = {}  # serial -> bay
+        self.drive_removed_at = {}  # serial -> (timestamp, bay)
+        self.grace_period = 60
         self.prev_cpu_idle = None
         self.prev_cpu_total = None
         self.prev_disk_read = None
@@ -294,6 +297,8 @@ class UNASMonitor:
             self.known_drives = current_drives
 
         drives = []
+        current_drive_map = {}
+        now = time.time()
 
         for device_path in Path('/dev').glob('sd?'):
             device = device_path.name
@@ -314,10 +319,12 @@ class UNASMonitor:
             if 'error' in data or not data.get('smart_status'):
                 continue
 
+            serial = data.get('serial_number', 'Unknown')
+
             drive = {
                 'bay': bay,
                 'model': data.get('model_name') or data.get('product', 'Unknown'),
-                'serial': data.get('serial_number', 'Unknown'),
+                'serial': serial,
                 'firmware': data.get('firmware_version', 'Unknown'),
                 'status': "Optimal" if data.get('smart_status', {}).get('passed') else "Warning",
                 'temperature': data.get('temperature', {}).get('current', 0)
@@ -344,7 +351,34 @@ class UNASMonitor:
             drive['total_size'] = round(size_bytes / (1024 ** 4), 2)
 
             drives.append(drive)
+            current_drive_map[serial] = bay
 
+        # detect moved drives and remove old bay entities immediately
+        for serial, old_bay in self.previous_drive_map.items():
+            if serial in current_drive_map:
+                new_bay = current_drive_map[serial]
+                if old_bay != new_bay:
+                    logger.info(f"Drive {serial} moved from bay {old_bay} to bay {new_bay}")
+
+        # detect removed drives and start grace period
+        removed_serials = set(self.previous_drive_map.keys()) - set(current_drive_map.keys())
+        for serial in removed_serials:
+            old_bay = self.previous_drive_map[serial]
+            if serial not in self.drive_removed_at:
+                logger.info(f"Drive {serial} removed from bay {old_bay}, starting {self.grace_period}s grace period")
+                self.drive_removed_at[serial] = (now, old_bay)
+
+        # check grace period for removed drives
+        for serial in list(self.drive_removed_at.keys()):
+            removed_time, bay = self.drive_removed_at[serial]
+            if serial in current_drive_map:
+                logger.info(f"Drive {serial} reconnected to bay {current_drive_map[serial]} within grace period")
+                del self.drive_removed_at[serial]
+            elif now - removed_time > self.grace_period:
+                logger.info(f"Drive {serial} grace period expired for bay {bay}")
+                del self.drive_removed_at[serial]
+
+        self.previous_drive_map = current_drive_map
         return drives
 
     def get_nvme_drives(self):
