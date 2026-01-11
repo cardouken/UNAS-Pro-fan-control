@@ -1,4 +1,4 @@
-# UNAS Pro for Home Assistant
+# UniFi UNAS for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/release/cardouken/homeassistant-unas-pro.svg)](https://github.com/cardouken/homeassistant-unas-pro/releases)
@@ -54,7 +54,7 @@ Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unas-pro
 
 ## Included metrics
 
-### UNAS Pro
+### UniFi UNAS
 
 - CPU temperature & usage
 - Disk I/O (read/write throughput)
@@ -104,12 +104,12 @@ Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unas-pro
 1. HACS → Integrations → ⋮ → Custom repositories
 2. Repository: `https://github.com/cardouken/homeassistant-unas-pro`
 3. Category: Integration → Add
-4. Install "UNAS Pro" and restart HA
+4. Install "UniFi UNAS" and restart HA
 
 **Manual:**
 
 1. Download latest release
-2. Extract to `custom_components/unas_pro/`
+2. Extract to `custom_components/unifi_unas/`
 3. Restart HA
 
 ## Setup
@@ -117,7 +117,7 @@ Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unas-pro
 ### Add Integration
 
 1. Settings → Devices & Services → Add Integration
-2. Search "UNAS Pro"
+2. Search "UniFi UNAS"
 3. Enter details:
     - **Host**: UNAS IP (e.g., `192.168.1.25`)
     - **Username**: `root`
@@ -148,7 +148,7 @@ Temperature-based fan curve with configurable parameters:
 
 **Configure in Home Assistant:**
 
-- Settings → Devices & Services → UNAS Pro → Device
+- Settings → Devices & Services → UniFi UNAS → Device
 - Adjust the four fan curve parameters
 
 **Example: Quiet**
@@ -171,13 +171,13 @@ Lock fans to a specific speed (0-100%).
 
 ## Monitoring
 
-All sensors appear automatically under the UNAS Pro device and individual HDD devices. No manual configuration needed.
+All sensors appear automatically under the UniFi UNAS device and individual HDD devices. No manual configuration needed.
 
 ## Troubleshooting
 
 ### Scripts Not Installing
 
-Check logs: Settings → System → Logs → "unas_pro"
+Check logs: Settings → System → Logs → "unifi_unas"
 
 Common issues:
 

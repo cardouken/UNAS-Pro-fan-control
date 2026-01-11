@@ -1,6 +1,6 @@
-# UNAS Pro Integration
+# UniFi UNAS Integration
 
-Monitor and control your Ubiquiti UNAS Pro from Home Assistant with comprehensive drive monitoring, system metrics, and automatic fan control.
+Monitor and control your Ubiquiti UniFi UNAS from Home Assistant with comprehensive drive monitoring, system metrics, and automatic fan control.
 
 ## Features
 
@@ -20,7 +20,7 @@ Monitor and control your Ubiquiti UNAS Pro from Home Assistant with comprehensiv
 
 ## Requirements
 
-- UNAS Pro with SSH enabled
+- UniFi UNAS with SSH enabled
 - Root access credentials
 - MQTT broker (Mosquitto addon) in Home Assistant
 

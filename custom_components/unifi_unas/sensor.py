@@ -227,9 +227,8 @@ async def async_setup_entry(
     entities = []
 
     for mqtt_key, name, unit, device_class, state_class, icon in UNAS_SENSORS:
-        entity_id_override = f"unas_pro_{mqtt_key.replace('unas_', '')}"
         entities.append(
-            UNASSensor(coordinator, mqtt_key, name, unit, device_class, state_class, icon, entity_id_override))
+            UNASSensor(coordinator, mqtt_key, name, unit, device_class, state_class, icon))
 
     entities.append(UNASFanCurveVisualizationSensor(coordinator))
 
@@ -322,10 +321,9 @@ async def _discover_and_add_pool_sensors(
     for pool_num in sorted(new_pools):
         for sensor_suffix, name, unit, device_class, state_class, icon in STORAGE_POOL_SENSORS:
             mqtt_key = f"unas_pool{pool_num}_{sensor_suffix}"
-            entity_id_override = f"unas_pro_storage_pool_{pool_num}_{sensor_suffix}"
             full_name = f"Storage Pool {pool_num} {name}"
             entities.append(
-                UNASSensor(coordinator, mqtt_key, full_name, unit, device_class, state_class, icon, entity_id_override))
+                UNASSensor(coordinator, mqtt_key, full_name, unit, device_class, state_class, icon))
 
     if entities:
         async_add_entities(entities)
@@ -343,16 +341,15 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
             device_class: SensorDeviceClass | None,
             state_class: SensorStateClass | None,
             icon: str | None,
-            entity_id_override: str | None = None,
     ) -> None:
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
+        self._attr_has_entity_name = True
         self._attr_name = name
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{mqtt_key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
-        self.entity_id = f"sensor.{entity_id_override or mqtt_key}"
         if icon:
             self._attr_icon = icon
         if device_class == SensorDeviceClass.TEMPERATURE:
@@ -370,9 +367,9 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            name="UNAS",
             manufacturer="Ubiquiti",
-            model="UNAS Pro",
+            model="UniFi UNAS",
         )
 
     @callback
@@ -400,16 +397,16 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
 class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_name = "Fan Curve"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_viz"
         self._attr_icon = "mdi:chart-line"
-        self.entity_id = "sensor.unas_pro_fan_curve"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            name="UNAS",
             manufacturer="Ubiquiti",
-            model="UNAS Pro",
+            model="UniFi UNAS",
         )
 
     @callback
@@ -496,12 +493,12 @@ class UNASNVMeSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
         self._nvme_slot = nvme_slot
+        self._attr_has_entity_name = True
         self._attr_name = name
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{mqtt_key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
-        self.entity_id = f"sensor.{mqtt_key}"
         if icon:
             self._attr_icon = icon
         if device_class == SensorDeviceClass.TEMPERATURE:
@@ -554,12 +551,12 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
         self._bay_num = bay_num
+        self._attr_has_entity_name = True
         self._attr_name = name
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{mqtt_key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
-        self.entity_id = f"sensor.{mqtt_key}"
         if icon:
             self._attr_icon = icon
         if device_class == SensorDeviceClass.TEMPERATURE:

@@ -1,4 +1,4 @@
-DOMAIN = "unas_pro"
+DOMAIN = "unifi_unas"
 
 CONF_HOST = "host"
 CONF_USERNAME = "username"

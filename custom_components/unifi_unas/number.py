@@ -56,6 +56,7 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
     ) -> None:
         super().__init__(coordinator)
         self.hass = hass
+        self._attr_has_entity_name = True
         self._attr_name = "Fan Speed"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_speed_control"
         self._attr_icon = "mdi:fan"
@@ -64,7 +65,6 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         self._attr_native_step = 1
         self._attr_native_unit_of_measurement = "%"
         self._attr_mode = NumberMode.SLIDER
-        self.entity_id = "number.unas_pro_fan_speed"
         self._current_value = None
         self._current_mode = None
         self._unsubscribe_speed = None
@@ -72,9 +72,9 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            name="UNAS",
             manufacturer="Ubiquiti",
-            model="UNAS Pro",
+            model="UniFi UNAS",
         )
 
     async def async_added_to_hass(self) -> None:
@@ -179,6 +179,7 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self.hass = hass
         self._key = key
+        self._attr_has_entity_name = True
         self._attr_name = name
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_{key}"
         self._attr_native_min_value = min_val
@@ -188,7 +189,6 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_mode = NumberMode.BOX
-        self.entity_id = f"number.unas_pro_{name.lower().replace(' ', '_')}"
         self._default = default
         self._unsubscribe = None
         self._is_fan_param = key in ["min_fan", "max_fan"]
@@ -197,9 +197,9 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name=f"UNAS Pro ({coordinator.ssh_manager.host})",
+            name="UNAS",
             manufacturer="Ubiquiti",
-            model="UNAS Pro",
+            model="UniFi UNAS",
         )
 
     async def async_added_to_hass(self) -> None:

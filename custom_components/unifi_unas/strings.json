@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to UNAS Pro",
-        "description": "Enter your UNAS Pro SSH credentials and MQTT broker details. Root access is required to install monitoring scripts.",
+        "title": "Connect to UniFi UNAS",
+        "description": "Enter your UniFi UNAS SSH credentials and MQTT broker details. Root access is required to install monitoring scripts.",
         "data": {
           "host": "Host (UNAS IP Address)",
           "username": "UNAS SSH username (root by default)",
@@ -19,8 +19,8 @@
         }
       },
       "reconfigure": {
-        "title": "Reconfigure UNAS Pro",
-        "description": "Update your UNAS Pro connection settings. The integration will reconnect and redeploy scripts with the new configuration.",
+        "title": "Reconfigure UniFi UNAS",
+        "description": "Update your UniFi UNAS connection settings. The integration will reconnect and redeploy scripts with the new configuration.",
         "data": {
           "host": "Host (UNAS IP Address)",
           "username": "UNAS SSH username (root by default)",
@@ -37,8 +37,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to UNAS Pro. Please check the IP address and credentials.",
-      "timeout_connect": "Connection timed out. Please check that SSH is enabled on your UNAS Pro.",
+      "cannot_connect": "Failed to connect to UniFi UNAS. Please check the IP address and credentials.",
+      "timeout_connect": "Connection timed out. Please check that SSH is enabled on your UniFi UNAS.",
       "mqtt_cannot_connect": "Failed to connect to MQTT broker. Please verify the MQTT host IP address.",
       "mqtt_invalid_auth": "MQTT authentication failed. Please check your MQTT username and password.",
       "mqtt_timeout": "MQTT connection timed out. Please verify the broker is running and accessible.",
@@ -47,15 +47,15 @@
       "unknown": "Unexpected error occurred. Please check the logs."
     },
     "abort": {
-      "already_configured": "This UNAS Pro is already configured.",
-      "mqtt_required": "MQTT integration must be installed and configured before setting up UNAS Pro. Please add the MQTT integration first, then try again.",
+      "already_configured": "This UniFi UNAS is already configured.",
+      "mqtt_required": "MQTT integration must be installed and configured before setting up UniFi UNAS. Please add the MQTT integration first, then try again.",
       "reconfigure_successful": "Configuration updated successfully. The integration is reconnecting with the new settings."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "UNAS Pro Options",
+        "title": "UniFi UNAS Options",
         "description": "Configure sensor polling interval. Lower values provide more frequent updates but may increase system load.",
         "data": {
           "scan_interval": "Polling Interval (seconds, 5-60)"
@@ -66,7 +66,7 @@
   "issues": {
     "mqtt_missing": {
       "title": "MQTT Integration Required",
-      "description": "The MQTT integration has been removed but is required for UNAS Pro to function. Please re-add the MQTT integration or remove the UNAS Pro integration."
+      "description": "The MQTT integration has been removed but is required for UniFi UNAS to function. Please re-add the MQTT integration or remove the UniFi UNAS integration."
     }
   }
 }
