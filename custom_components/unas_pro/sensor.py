@@ -188,6 +188,34 @@ DRIVE_SENSORS = [
     ("bad_sectors", "Bad Sectors", None, None, None, "mdi:alert-circle"),
 ]
 
+NVME_SENSORS = [
+    (
+        "temperature",
+        "Temperature",
+        UnitOfTemperature.CELSIUS,
+        SensorDeviceClass.TEMPERATURE,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    ("model", "Model", None, None, None, "mdi:expansion-card"),
+    ("serial", "Serial Number", None, None, None, "mdi:identifier"),
+    ("firmware", "Firmware", None, None, None, "mdi:information"),
+    ("status", "Status", None, None, None, "mdi:check-circle"),
+    ("total_size", "Total Size", "TB", SensorDeviceClass.DATA_SIZE, None, None),
+    (
+        "power_on_hours",
+        "Power-On Hours",
+        UnitOfTime.HOURS,
+        SensorDeviceClass.DURATION,
+        SensorStateClass.TOTAL_INCREASING,
+        None,
+    ),
+    ("percentage_used", "Percentage Used", PERCENTAGE, None, SensorStateClass.MEASUREMENT, "mdi:chart-line"),
+    ("available_spare", "Available Spare", PERCENTAGE, None, SensorStateClass.MEASUREMENT, "mdi:database"),
+    ("media_errors", "Media Errors", None, None, None, "mdi:alert-circle"),
+    ("unsafe_shutdowns", "Unsafe Shutdowns", None, None, SensorStateClass.TOTAL_INCREASING, "mdi:power"),
+]
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -212,9 +240,10 @@ async def async_setup_entry(
         for _ in range(6):
             await asyncio.sleep(10)
             await _discover_and_add_drive_sensors(coordinator, async_add_entities)
+            await _discover_and_add_nvme_sensors(coordinator, async_add_entities)
             await _discover_and_add_pool_sensors(coordinator, async_add_entities)
 
-            if coordinator.discovered_bays or coordinator.discovered_pools:
+            if coordinator.discovered_bays or coordinator.discovered_nvmes or coordinator.discovered_pools:
                 break
 
     hass.async_create_task(discover_drives())
@@ -243,6 +272,31 @@ async def _discover_and_add_drive_sensors(
         async_add_entities(entities)
         coordinator.discovered_bays.update(new_bays)
         _LOGGER.info("Added %d sensors for %d new drives", len(entities), len(new_bays))
+
+
+async def _discover_and_add_nvme_sensors(
+    coordinator: UNASDataUpdateCoordinator,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    mqtt_data = coordinator.mqtt_client.get_data()
+    detected_nvmes = {key.split("_")[2] for key in mqtt_data.keys() if key.startswith("unas_nvme_") and "_temperature" in key}
+
+    new_nvmes = detected_nvmes - coordinator.discovered_nvmes
+    if not new_nvmes:
+        return
+
+    _LOGGER.debug("Discovered new NVMe drives: %s", sorted(new_nvmes))
+
+    entities = []
+    for nvme_slot in sorted(new_nvmes):
+        for sensor_suffix, name, unit, device_class, state_class, icon in NVME_SENSORS:
+            mqtt_key = f"unas_nvme_{nvme_slot}_{sensor_suffix}"
+            entities.append(UNASNVMeSensor(coordinator, mqtt_key, name, nvme_slot, unit, device_class, state_class, icon))
+
+    if entities:
+        async_add_entities(entities)
+        coordinator.discovered_nvmes.update(new_nvmes)
+        _LOGGER.info("Added %d sensors for %d new NVMe drives", len(entities), len(new_nvmes))
 
 
 async def _discover_and_add_pool_sensors(
@@ -406,6 +460,62 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
             and "fan_curve_min_fan" in mqtt_data
             and "fan_curve_max_fan" in mqtt_data
         )
+
+
+class UNASNVMeSensor(CoordinatorEntity, SensorEntity):
+    def __init__(
+        self,
+        coordinator: UNASDataUpdateCoordinator,
+        mqtt_key: str,
+        name: str,
+        nvme_slot: str,
+        unit: str | None,
+        device_class: SensorDeviceClass | None,
+        state_class: SensorStateClass | None,
+        icon: str | None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._mqtt_key = mqtt_key
+        self._nvme_slot = nvme_slot
+        self._attr_name = name
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_{mqtt_key}"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self.entity_id = f"sensor.{mqtt_key}"
+        if icon:
+            self._attr_icon = icon
+
+        mqtt_data = coordinator.mqtt_client.get_data()
+        model = mqtt_data.get(f"unas_nvme_{nvme_slot}_model", "Unknown")
+        serial = mqtt_data.get(f"unas_nvme_{nvme_slot}_serial", "")
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_nvme_{nvme_slot}")},
+            name=f"UNAS NVMe {nvme_slot}",
+            manufacturer=model.split()[0] if model != "Unknown" else "Unknown",
+            model=model,
+            serial_number=serial,
+            via_device=(DOMAIN, coordinator.entry.entry_id),
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        mqtt_data = self.coordinator.data.get("mqtt_data", {})
+        self._attr_native_value = mqtt_data.get(self._mqtt_key)
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        if not self.coordinator.mqtt_client.is_available():
+            return False
+        mqtt_data = self.coordinator.data.get("mqtt_data", {})
+        return self._mqtt_key in mqtt_data
+
+    @property
+    def native_value(self):
+        mqtt_data = self.coordinator.data.get("mqtt_data", {})
+        return mqtt_data.get(self._mqtt_key)
 
 
 class UNASDriveSensor(CoordinatorEntity, SensorEntity):

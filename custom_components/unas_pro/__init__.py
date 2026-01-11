@@ -236,6 +236,7 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
         self.mqtt_client = mqtt_client
         self.entry = entry
         self.discovered_bays: set[str] = set()
+        self.discovered_nvmes: set[str] = set()
         self.discovered_pools: set[str] = set()
         self.sensor_add_entities = None
 
@@ -289,8 +290,9 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             })
 
             if hasattr(self, "sensor_add_entities") and hasattr(self, "discovered_bays"):
-                from .sensor import _discover_and_add_drive_sensors, _discover_and_add_pool_sensors
+                from .sensor import _discover_and_add_drive_sensors, _discover_and_add_nvme_sensors, _discover_and_add_pool_sensors
                 await _discover_and_add_drive_sensors(self, self.sensor_add_entities)
+                await _discover_and_add_nvme_sensors(self, self.sensor_add_entities)
                 await _discover_and_add_pool_sensors(self, self.sensor_add_entities)
 
         except Exception as err:

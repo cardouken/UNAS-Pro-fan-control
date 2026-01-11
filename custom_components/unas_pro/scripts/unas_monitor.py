@@ -329,6 +329,51 @@ class UNASMonitor:
 
         return drives
 
+    def get_nvme_drives(self):
+        nvmes = []
+
+        for device_path in sorted(Path('/dev').glob('nvme*n1')):
+            device = device_path.name
+            slot = device.replace('nvme', '').replace('n1', '')
+
+            output = self.run_cmd(['smartctl', '-a', '-j', f'/dev/{device}'])
+            if not output:
+                continue
+
+            try:
+                data = json.loads(output)
+            except json.JSONDecodeError:
+                continue
+
+            if 'error' in data:
+                continue
+
+            health = data.get('nvme_smart_health_information_log', {})
+
+            nvme = {
+                'slot': slot,
+                'model': data.get('model_name', 'Unknown'),
+                'serial': data.get('serial_number', 'Unknown'),
+                'firmware': data.get('firmware_version', 'Unknown'),
+                'status': "Optimal",
+                'temperature': health.get('temperature', 0),
+                'power_on_hours': health.get('power_on_hours', 0),
+                'percentage_used': health.get('percentage_used', 0),
+                'available_spare': health.get('available_spare', 100),
+                'media_errors': health.get('media_errors', 0),
+                'unsafe_shutdowns': health.get('unsafe_shutdowns', 0)
+            }
+
+            size_bytes = data.get('user_capacity', {}).get('bytes', 0)
+            nvme['total_size'] = round(size_bytes / (1024 ** 4), 2)
+
+            if health.get('critical_warning', 0) != 0 or health.get('available_spare', 100) < 10:
+                nvme['status'] = "Warning"
+
+            nvmes.append(nvme)
+
+        return nvmes
+
     def get_pools(self):
         pools = []
         pool_num = 1
@@ -445,6 +490,12 @@ class UNASMonitor:
             for key, value in drive.items():
                 self.publish(f"unas_hdd_{bay}_{key}", value)
 
+        nvmes = self.get_nvme_drives()
+        for nvme in nvmes:
+            slot = nvme.pop('slot')
+            for key, value in nvme.items():
+                self.publish(f"unas_nvme_{slot}_{key}", value)
+
         pools = self.get_pools()
         for pool in pools:
             pool_num = pool.pop('pool')
@@ -479,13 +530,16 @@ class UNASMonitor:
         self.mqtt.publish("homeassistant/sensor/unas_nfs_mounts/state", str(nfs_data['count']), retain=True)
         self.mqtt.publish("homeassistant/sensor/unas_nfs_mounts/attributes", json.dumps(nfs_data['clients']), retain=True)
 
-        temps = [d.get('temperature', 0) for d in drives if 'temperature' in d]
-        temp_str = ', '.join(f"{t}°C" for t in temps) if temps else "no drives"
+        drive_temps = [d.get('temperature', 0) for d in drives if 'temperature' in d]
+        nvme_temps = [n.get('temperature', 0) for n in nvmes if 'temperature' in n]
+        
+        hdd_str = ', '.join(f"{t}°C" for t in drive_temps) if drive_temps else "no drives"
+        nvme_str = f" | NVMe {', '.join(f'{t}°C' for t in nvme_temps)}" if nvme_temps else ""
 
         logger.info(
             f"{system['fan_speed']} PWM ({system['fan_speed_percent']}%) | "
             f"CPU {system['cpu_temp']}°C | "
-            f"HDD {temp_str} | "
+            f"HDD {hdd_str}{nvme_str} | "
             f"R: {system['disk_read']} MB/s W: {system['disk_write']} MB/s"
         )
 
