@@ -1,13 +1,46 @@
 from __future__ import annotations
 
 import logging
+import json
 from typing import Any
 from datetime import datetime
 
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 
+from .const import MQTT_ROOT
+
 _LOGGER = logging.getLogger(__name__)
+
+
+"""
+MQTT Topic Structure Mapping:
+
+This client subscribes to unas/# and parses topics into keys for entity state.
+When adding new topics, update both the publisher (unas_monitor.py/fan_control.sh) 
+and the corresponding handler below.
+
+Topic Pattern                        → Internal Key                   → Type
+─────────────────────────────────────────────────────────────────────────────────
+unas/availability                    → _status                        → status
+unas/system/{metric}                 → unas_{metric}                  → value
+unas/hdd/{bay}/{metric}              → unas_hdd_{bay}_{metric}        → value
+unas/nvme/{slot}/{metric}            → unas_nvme_{slot}_{metric}      → value
+unas/pool/{num}/{metric}             → unas_pool{num}_{metric}        → value
+unas/smb/connections                 → unas_smb_connections           → value
+unas/smb/clients                     → unas_smb_connections           → attributes
+unas/nfs/mounts                      → unas_nfs_mounts                → value
+unas/nfs/clients                     → unas_nfs_mounts                → attributes
+unas/control/monitor_interval        → monitor_interval               → value
+unas/control/fan/mode                → fan_mode                       → value
+unas/control/fan/curve/{param}       → fan_curve_{param}              → value
+
+Examples:
+  unas/system/cpu_temp         → unas_cpu_temp = 45
+  unas/hdd/1/temperature       → unas_hdd_1_temperature = 38
+  unas/nvme/0/percentage_used  → unas_nvme_0_percentage_used = 5
+  unas/smb/clients             → unas_smb_connections_attributes = [{...}]
+"""
 
 
 class UNASMQTTClient:
@@ -24,19 +57,13 @@ class UNASMQTTClient:
             _LOGGER.error("MQTT integration not loaded")
             return
 
-        topics = [
-            ("homeassistant/sensor/+/+", self._handle_message),
-            ("homeassistant/unas/fan_curve/+", self._handle_message),
-            ("homeassistant/unas/status", self._handle_status),
-        ]
-
-        for topic, handler in topics:
-            try:
-                sub = await mqtt.async_subscribe(self.hass, topic, handler, qos=0)
-                self._subscriptions.append(sub)
-                _LOGGER.debug("Subscribed to MQTT topic: %s", topic)
-            except Exception as err:
-                _LOGGER.error("Failed to subscribe to %s: %s", topic, err)
+        # subscribe to entire UNAS namespace
+        try:
+            sub = await mqtt.async_subscribe(self.hass, f"{MQTT_ROOT}/#", self._handle_message, qos=0)
+            self._subscriptions.append(sub)
+            _LOGGER.debug("Subscribed to MQTT topic: %s/#", MQTT_ROOT)
+        except Exception as err:
+            _LOGGER.error("Failed to subscribe to %s/#: %s", MQTT_ROOT, err)
 
     async def async_unsubscribe(self) -> None:
         for unsub in self._subscriptions:
@@ -45,28 +72,76 @@ class UNASMQTTClient:
         _LOGGER.debug("Unsubscribed from %d MQTT topics", len(self._subscriptions))
 
     @callback
-    def _handle_status(self, msg) -> None:
-        self._status = msg.payload
-        _LOGGER.debug("UNAS status: %s", self._status)
-
-        if hasattr(self, "_coordinator") and self._coordinator:
-            self.hass.async_create_task(self._coordinator.async_request_refresh())
-
-    @callback
     def _handle_message(self, msg) -> None:
         parts = msg.topic.split("/")
+        
+        if parts[0] != MQTT_ROOT:
+            return
+        
+        num_parts = len(parts)
+        
+        if num_parts == 2:
+            self._handle_two_part(parts, msg.payload)
+        elif num_parts == 3:
+            self._handle_three_part(parts, msg.payload)
+        elif num_parts == 4:
+            self._handle_four_part(parts, msg.payload)
+        elif num_parts == 5:
+            self._handle_five_part(parts, msg.payload)
 
-        if len(parts) >= 4 and parts[1] == "sensor":
-            sensor_name = parts[2]
-            if sensor_name.startswith("unas_"):
-                if parts[-1] == "state":
-                    self._store_value(sensor_name, msg.payload)
-                elif parts[-1] == "attributes":
-                    self._store_attributes(sensor_name, msg.payload)
+    def _handle_two_part(self, parts, payload):
+        # unas/availability
+        if parts[1] == "availability":
+            self._status = payload
+            _LOGGER.debug("UNAS status: %s", self._status)
+            if hasattr(self, "_coordinator") and self._coordinator:
+                self.hass.async_create_task(self._coordinator.async_request_refresh())
 
-        elif len(parts) == 4 and parts[1] == "unas" and parts[2] == "fan_curve":
-            param_name = parts[3]
-            self._store_value(f"fan_curve_{param_name}", msg.payload)
+    def _handle_three_part(self, parts, payload):
+        category, item = parts[1], parts[2]
+        
+        # unas/system/<metric>
+        if category == "system":
+            self._store_value(f"unas_{item}", payload)
+        
+        # unas/smb/connections or unas/smb/clients
+        elif category == "smb":
+            if item == "connections":
+                self._store_value("unas_smb_connections", payload)
+            elif item == "clients":
+                self._store_attributes("unas_smb_connections", payload)
+        
+        # unas/nfs/mounts or unas/nfs/clients
+        elif category == "nfs":
+            if item == "mounts":
+                self._store_value("unas_nfs_mounts", payload)
+            elif item == "clients":
+                self._store_attributes("unas_nfs_mounts", payload)
+        
+        # unas/control/<setting>
+        elif category == "control":
+            self._store_value(item, payload)
+
+    def _handle_four_part(self, parts, payload):
+        category, identifier, metric = parts[1], parts[2], parts[3]
+        
+        # unas/hdd/<bay>/<metric> or unas/nvme/<slot>/<metric>
+        if category in ("hdd", "nvme"):
+            self._store_value(f"unas_{category}_{identifier}_{metric}", payload)
+        
+        # unas/pool/<num>/<metric>
+        elif category == "pool":
+            self._store_value(f"unas_pool{identifier}_{metric}", payload)
+        
+        # unas/control/fan/mode
+        elif category == "control" and identifier == "fan" and metric == "mode":
+            self._store_value("fan_mode", payload)
+
+    def _handle_five_part(self, parts, payload):
+        # unas/control/fan/curve/<param>
+        if parts[1:4] == ["control", "fan", "curve"]:
+            param = parts[4]
+            self._store_value(f"fan_curve_{param}", payload)
 
     def _store_value(self, key: str, payload: str) -> None:
         try:
@@ -82,7 +157,6 @@ class UNASMQTTClient:
             self.hass.async_create_task(self._coordinator.async_request_refresh())
 
     def _store_attributes(self, key: str, payload: str) -> None:
-        import json
         try:
             self._data[f"{key}_attributes"] = json.loads(payload)
             self._last_update = datetime.now()

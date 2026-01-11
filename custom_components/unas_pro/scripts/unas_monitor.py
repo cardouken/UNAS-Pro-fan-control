@@ -18,7 +18,18 @@ MQTT_HOST = "REPLACE_ME"
 MQTT_USER = "REPLACE_ME"
 MQTT_PASS = "REPLACE_ME"
 DEFAULT_MONITOR_INTERVAL = 30
-MONITOR_INTERVAL_TOPIC = "homeassistant/unas/monitor_interval"
+
+# MQTT topic structure
+MQTT_ROOT = "unas"
+MQTT_AVAILABILITY = f"{MQTT_ROOT}/availability"
+MQTT_SYSTEM = f"{MQTT_ROOT}/system"
+MQTT_HDD = f"{MQTT_ROOT}/hdd"
+MQTT_NVME = f"{MQTT_ROOT}/nvme"
+MQTT_POOL = f"{MQTT_ROOT}/pool"
+MQTT_SMB = f"{MQTT_ROOT}/smb"
+MQTT_NFS = f"{MQTT_ROOT}/nfs"
+MQTT_CONTROL = f"{MQTT_ROOT}/control"
+MONITOR_INTERVAL_TOPIC = f"{MQTT_CONTROL}/monitor_interval"
 
 DEVICE_MODEL = "UNAS_PRO"
 
@@ -74,14 +85,14 @@ class UNASMonitor:
         self.mqtt.on_disconnect = self._on_disconnect
         self.mqtt.on_message = self._on_message
 
-        self.mqtt.will_set("homeassistant/unas/status", "offline", retain=True)
+        self.mqtt.will_set(MQTT_AVAILABILITY, "offline", retain=True)
         self.mqtt.connect(MQTT_HOST, 1883, 60)
         self.mqtt.loop_start()
         time.sleep(2)
 
         self.monitor_interval = DEFAULT_MONITOR_INTERVAL
         self.mqtt.subscribe(MONITOR_INTERVAL_TOPIC)
-        self.mqtt.publish("homeassistant/unas/status", "online", retain=True)
+        self.mqtt.publish(MQTT_AVAILABILITY, "online", retain=True)
 
         self.bay_cache = {}
         self.known_drives = set()
@@ -112,8 +123,17 @@ class UNASMonitor:
             except (ValueError, TypeError):
                 pass
 
-    def publish(self, topic, value):
-        self.mqtt.publish(f"homeassistant/sensor/{topic}/state", str(value), retain=True)
+    def publish_system(self, metric, value):
+        self.mqtt.publish(f"{MQTT_SYSTEM}/{metric}", str(value), retain=True)
+    
+    def publish_hdd(self, bay, metric, value):
+        self.mqtt.publish(f"{MQTT_HDD}/{bay}/{metric}", str(value), retain=True)
+    
+    def publish_nvme(self, slot, metric, value):
+        self.mqtt.publish(f"{MQTT_NVME}/{slot}/{metric}", str(value), retain=True)
+    
+    def publish_pool(self, pool_num, metric, value):
+        self.mqtt.publish(f"{MQTT_POOL}/{pool_num}/{metric}", str(value), retain=True)
 
     def run_cmd(self, cmd, timeout=10):
         try:
@@ -482,25 +502,25 @@ class UNASMonitor:
     def collect_and_publish(self):
         system = self.get_system_metrics()
         for key, value in system.items():
-            self.publish(f"unas_{key}", value)
+            self.publish_system(key, value)
 
         drives = self.get_drives()
         for drive in drives:
             bay = drive.pop('bay')
             for key, value in drive.items():
-                self.publish(f"unas_hdd_{bay}_{key}", value)
+                self.publish_hdd(bay, key, value)
 
         nvmes = self.get_nvme_drives()
         for nvme in nvmes:
             slot = nvme.pop('slot')
             for key, value in nvme.items():
-                self.publish(f"unas_nvme_{slot}_{key}", value)
+                self.publish_nvme(slot, key, value)
 
         pools = self.get_pools()
         for pool in pools:
             pool_num = pool.pop('pool')
             for key, value in pool.items():
-                self.publish(f"unas_pool{pool_num}_{key}", value)
+                self.publish_pool(pool_num, key, value)
 
         smb_connections = self.get_smb_connections()
         smb_shares = self.get_smb_shares()
@@ -518,8 +538,8 @@ class UNASMonitor:
                 'share': share['share']
             })
 
-        self.mqtt.publish("homeassistant/sensor/unas_smb_connections/state", str(smb_data['count']), retain=True)
-        self.mqtt.publish("homeassistant/sensor/unas_smb_connections/attributes", json.dumps(smb_data['clients']), retain=True)
+        self.mqtt.publish(f"{MQTT_SMB}/connections", str(smb_data['count']), retain=True)
+        self.mqtt.publish(f"{MQTT_SMB}/clients", json.dumps(smb_data['clients']), retain=True)
 
         nfs_mounts = self.get_nfs_mounts()
         nfs_data = {
@@ -527,8 +547,8 @@ class UNASMonitor:
             'clients': nfs_mounts
         }
 
-        self.mqtt.publish("homeassistant/sensor/unas_nfs_mounts/state", str(nfs_data['count']), retain=True)
-        self.mqtt.publish("homeassistant/sensor/unas_nfs_mounts/attributes", json.dumps(nfs_data['clients']), retain=True)
+        self.mqtt.publish(f"{MQTT_NFS}/mounts", str(nfs_data['count']), retain=True)
+        self.mqtt.publish(f"{MQTT_NFS}/clients", json.dumps(nfs_data['clients']), retain=True)
 
         drive_temps = [d.get('temperature', 0) for d in drives if 'temperature' in d]
         nvme_temps = [n.get('temperature', 0) for n in nvmes if 'temperature' in n]

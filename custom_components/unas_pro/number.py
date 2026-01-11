@@ -13,7 +13,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, MQTT_CONTROL, MQTT_SYSTEM
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,11 +110,11 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
             self.async_write_ha_state()
 
         self._unsubscribe_speed = await mqtt.async_subscribe(
-            self.hass, "homeassistant/sensor/unas_fan_speed/state", speed_message_received, qos=0
+            self.hass, f"{MQTT_SYSTEM}/fan_speed", speed_message_received, qos=0
         )
 
         self._unsubscribe_mode = await mqtt.async_subscribe(
-            self.hass, "homeassistant/unas/fan_mode", mode_message_received, qos=0
+            self.hass, f"{MQTT_CONTROL}/fan/mode", mode_message_received, qos=0
         )
 
     async def async_will_remove_from_hass(self) -> None:
@@ -156,7 +156,7 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         pwm_value = round((value * 255) / 100)
 
         await mqtt.async_publish(
-            self.hass, "homeassistant/unas/fan_mode", str(pwm_value), qos=0, retain=True
+            self.hass, f"{MQTT_CONTROL}/fan/mode", str(pwm_value), qos=0, retain=True
         )
 
         self._current_value = value
@@ -193,7 +193,7 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
         self._unsubscribe = None
         self._is_fan_param = key in ["min_fan", "max_fan"]
 
-        self._mqtt_topic = f"homeassistant/unas/fan_curve/{key}"
+        self._mqtt_topic = f"{MQTT_CONTROL}/fan/curve/{key}"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},

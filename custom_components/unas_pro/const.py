@@ -28,3 +28,14 @@ DEVICE_MODELS = {
     "UNAS_4": "UNAS 4",
     "UNAS_2": "UNAS 2",
 }
+
+# MQTT topic structure
+MQTT_ROOT = "unas"
+MQTT_AVAILABILITY = f"{MQTT_ROOT}/availability"
+MQTT_CONTROL = f"{MQTT_ROOT}/control"
+MQTT_SYSTEM = f"{MQTT_ROOT}/system"
+MQTT_HDD = f"{MQTT_ROOT}/hdd"
+MQTT_NVME = f"{MQTT_ROOT}/nvme"
+MQTT_POOL = f"{MQTT_ROOT}/pool"
+MQTT_SMB = f"{MQTT_ROOT}/smb"
+MQTT_NFS = f"{MQTT_ROOT}/nfs"

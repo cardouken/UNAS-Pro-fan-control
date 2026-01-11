@@ -12,7 +12,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, MQTT_CONTROL
 
 DEFAULT_FAN_SPEED_50_PCT = 128
 
@@ -94,12 +94,12 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
             self.async_write_ha_state()
 
         self._unsubscribe = await mqtt.async_subscribe(
-            self.hass, "homeassistant/unas/fan_mode", message_received, qos=0
+            self.hass, f"{MQTT_CONTROL}/fan/mode", message_received, qos=0
         )
 
     async def _publish_mode(self, mode: str) -> None:
         try:
-            await mqtt.async_publish(self.hass, "homeassistant/unas/fan_mode", mode, qos=0, retain=True)
+            await mqtt.async_publish(self.hass, f"{MQTT_CONTROL}/fan/mode", mode, qos=0, retain=True)
         except Exception as err:
             _LOGGER.error("Failed to publish fan mode: %s", err)
 

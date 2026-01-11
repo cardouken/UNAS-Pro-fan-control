@@ -6,6 +6,12 @@ MQTT_HOST="REPLACE_ME"
 MQTT_USER="REPLACE_ME"
 MQTT_PASS="REPLACE_ME"
 
+# MQTT topic structure
+MQTT_ROOT="unas"
+MQTT_SYSTEM="${MQTT_ROOT}/system"
+MQTT_CONTROL="${MQTT_ROOT}/control"
+MQTT_FAN="${MQTT_CONTROL}/fan"
+
 HDD_DEVICES=(sda sdb sdc sdd sde sdf sdg)
 
 STATE_FILE="/tmp/fan_control_state"
@@ -37,7 +43,7 @@ update_state_from_mqtt() {
     local var_name
     
     case "${topic##*/}" in
-        fan_mode)
+        mode)
             var_name="FAN_MODE"
             ;;
         min_temp)
@@ -67,8 +73,8 @@ update_state_from_mqtt() {
 # Fetch retained MQTT messages on startup (if available)
 echo "Fetching MQTT state..."
 MQTT_OUTPUT=$(timeout 5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-    -t "homeassistant/unas/fan_mode" \
-    -t "homeassistant/unas/fan_curve/+" \
+    -t "${MQTT_FAN}/mode" \
+    -t "${MQTT_FAN}/curve/+" \
     -C 5 \
     -F "%t %p" 2>/dev/null || true)
 
@@ -85,8 +91,8 @@ cat "$STATE_FILE"
 
 # Start persistent MQTT subscription for updates
 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-    -t "homeassistant/unas/fan_mode" \
-    -t "homeassistant/unas/fan_curve/+" \
+    -t "${MQTT_FAN}/mode" \
+    -t "${MQTT_FAN}/curve/+" \
     -F "%t %p" 2>/dev/null | while read -r topic payload; do
     update_state_from_mqtt "$topic" "$payload"
 done &
@@ -122,7 +128,7 @@ publish_if_changed() {
 
     if [ "$new_pwm" != "$last_pwm" ]; then
         mosquitto_pub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-            -t "homeassistant/sensor/unas_fan_speed/state" -m "$new_pwm" 2>/dev/null || true
+            -t "${MQTT_SYSTEM}/fan_speed" -m "$new_pwm" 2>/dev/null || true
         echo "$new_pwm" > "$LAST_PWM_FILE"
     fi
 }
