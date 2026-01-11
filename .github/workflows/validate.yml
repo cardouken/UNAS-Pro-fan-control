@@ -26,7 +26,7 @@ jobs:
           import sys
           from pathlib import Path
           
-          manifest = json.loads(Path('custom_components/unas_pro/manifest.json').read_text())
+          manifest = json.loads(Path('custom_components/unifi_unas/manifest.json').read_text())
           required = ['domain', 'name', 'documentation', 'issue_tracker', 'codeowners', 'version']
           missing = [k for k in required if k not in manifest]
           if missing:
