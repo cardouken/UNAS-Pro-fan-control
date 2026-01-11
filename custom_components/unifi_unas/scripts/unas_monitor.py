@@ -17,10 +17,8 @@ logger = logging.getLogger(__name__)
 MQTT_HOST = "REPLACE_ME"
 MQTT_USER = "REPLACE_ME"
 MQTT_PASS = "REPLACE_ME"
+MQTT_ROOT = "REPLACE_ME"
 DEFAULT_MONITOR_INTERVAL = 30
-
-# MQTT topic structure
-MQTT_ROOT = "unas"
 MQTT_AVAILABILITY = f"{MQTT_ROOT}/availability"
 MQTT_SYSTEM = f"{MQTT_ROOT}/system"
 MQTT_HDD = f"{MQTT_ROOT}/hdd"
@@ -50,8 +48,8 @@ BAY_MAPPINGS = {
         "4": "4",
         "5": "5",
         "6": "6",
-        "7": "7", # unconfirmed, assuming based on confirmed 1-6
-        "8": "8" # unconfirmed, assuming based on confirmed 1-6
+        "7": "7",
+        "8": "8"
     },
     # Pro 4 all unconfirmed, just assumed defaults to allow drive discovery even if mapped incorrectly
     "UNAS_PRO_4": {
