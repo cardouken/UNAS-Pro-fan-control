@@ -122,11 +122,7 @@ class SSHManager:
             await self._upload_file("/etc/systemd/system/fan_control.service", fan_control_service)
 
             await self.execute_command("apt-get update && apt-get install -y mosquitto-clients python3-pip")
-
-            stdout, _ = await self.execute_command("pip3 show paho-mqtt 2>/dev/null || echo 'not_installed'")
-            if "not_installed" in stdout:
-                _LOGGER.info("Installing paho-mqtt on UNAS...")
-                await self.execute_command("pip3 install paho-mqtt")
+            await self.execute_command("pip3 install --ignore-installed paho-mqtt==2.1.0")
 
             await self.execute_command("systemctl daemon-reload")
             await self.execute_command("systemctl enable unas_monitor")
