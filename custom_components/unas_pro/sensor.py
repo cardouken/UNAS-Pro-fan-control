@@ -218,9 +218,9 @@ NVME_SENSORS = [
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: UNASDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
@@ -228,7 +228,8 @@ async def async_setup_entry(
 
     for mqtt_key, name, unit, device_class, state_class, icon in UNAS_SENSORS:
         entity_id_override = f"unas_pro_{mqtt_key.replace('unas_', '')}"
-        entities.append(UNASSensor(coordinator, mqtt_key, name, unit, device_class, state_class, icon, entity_id_override))
+        entities.append(
+            UNASSensor(coordinator, mqtt_key, name, unit, device_class, state_class, icon, entity_id_override))
 
     entities.append(UNASFanCurveVisualizationSensor(coordinator))
 
@@ -250,11 +251,12 @@ async def async_setup_entry(
 
 
 async def _discover_and_add_drive_sensors(
-    coordinator: UNASDataUpdateCoordinator,
-    async_add_entities: AddEntitiesCallback,
+        coordinator: UNASDataUpdateCoordinator,
+        async_add_entities: AddEntitiesCallback,
 ) -> None:
     mqtt_data = coordinator.mqtt_client.get_data()
-    detected_bays = {key.split("_")[2] for key in mqtt_data.keys() if key.startswith("unas_hdd_") and "_temperature" in key}
+    detected_bays = {key.split("_")[2] for key in mqtt_data.keys() if
+                     key.startswith("unas_hdd_") and "_temperature" in key}
 
     new_bays = detected_bays - coordinator.discovered_bays
     if not new_bays:
@@ -266,7 +268,8 @@ async def _discover_and_add_drive_sensors(
     for bay_num in sorted(new_bays):
         for sensor_suffix, name, unit, device_class, state_class, icon in DRIVE_SENSORS:
             mqtt_key = f"unas_hdd_{bay_num}_{sensor_suffix}"
-            entities.append(UNASDriveSensor(coordinator, mqtt_key, name, bay_num, unit, device_class, state_class, icon))
+            entities.append(
+                UNASDriveSensor(coordinator, mqtt_key, name, bay_num, unit, device_class, state_class, icon))
 
     if entities:
         async_add_entities(entities)
@@ -275,11 +278,12 @@ async def _discover_and_add_drive_sensors(
 
 
 async def _discover_and_add_nvme_sensors(
-    coordinator: UNASDataUpdateCoordinator,
-    async_add_entities: AddEntitiesCallback,
+        coordinator: UNASDataUpdateCoordinator,
+        async_add_entities: AddEntitiesCallback,
 ) -> None:
     mqtt_data = coordinator.mqtt_client.get_data()
-    detected_nvmes = {key.split("_")[2] for key in mqtt_data.keys() if key.startswith("unas_nvme_") and "_temperature" in key}
+    detected_nvmes = {key.split("_")[2] for key in mqtt_data.keys() if
+                      key.startswith("unas_nvme_") and "_temperature" in key}
 
     new_nvmes = detected_nvmes - coordinator.discovered_nvmes
     if not new_nvmes:
@@ -291,7 +295,8 @@ async def _discover_and_add_nvme_sensors(
     for nvme_slot in sorted(new_nvmes):
         for sensor_suffix, name, unit, device_class, state_class, icon in NVME_SENSORS:
             mqtt_key = f"unas_nvme_{nvme_slot}_{sensor_suffix}"
-            entities.append(UNASNVMeSensor(coordinator, mqtt_key, name, nvme_slot, unit, device_class, state_class, icon))
+            entities.append(
+                UNASNVMeSensor(coordinator, mqtt_key, name, nvme_slot, unit, device_class, state_class, icon))
 
     if entities:
         async_add_entities(entities)
@@ -300,11 +305,12 @@ async def _discover_and_add_nvme_sensors(
 
 
 async def _discover_and_add_pool_sensors(
-    coordinator: UNASDataUpdateCoordinator,
-    async_add_entities: AddEntitiesCallback,
+        coordinator: UNASDataUpdateCoordinator,
+        async_add_entities: AddEntitiesCallback,
 ) -> None:
     mqtt_data = coordinator.mqtt_client.get_data()
-    detected_pools = {key.replace("unas_pool", "").replace("_usage", "") for key in mqtt_data.keys() if key.startswith("unas_pool") and "_usage" in key}
+    detected_pools = {key.replace("unas_pool", "").replace("_usage", "") for key in mqtt_data.keys() if
+                      key.startswith("unas_pool") and "_usage" in key}
 
     new_pools = detected_pools - coordinator.discovered_pools
     if not new_pools:
@@ -318,7 +324,8 @@ async def _discover_and_add_pool_sensors(
             mqtt_key = f"unas_pool{pool_num}_{sensor_suffix}"
             entity_id_override = f"unas_pro_storage_pool_{pool_num}_{sensor_suffix}"
             full_name = f"Storage Pool {pool_num} {name}"
-            entities.append(UNASSensor(coordinator, mqtt_key, full_name, unit, device_class, state_class, icon, entity_id_override))
+            entities.append(
+                UNASSensor(coordinator, mqtt_key, full_name, unit, device_class, state_class, icon, entity_id_override))
 
     if entities:
         async_add_entities(entities)
@@ -328,15 +335,15 @@ async def _discover_and_add_pool_sensors(
 
 class UNASSensor(CoordinatorEntity, SensorEntity):
     def __init__(
-        self,
-        coordinator: UNASDataUpdateCoordinator,
-        mqtt_key: str,
-        name: str,
-        unit: str | None,
-        device_class: SensorDeviceClass | None,
-        state_class: SensorStateClass | None,
-        icon: str | None,
-        entity_id_override: str | None = None,
+            self,
+            coordinator: UNASDataUpdateCoordinator,
+            mqtt_key: str,
+            name: str,
+            unit: str | None,
+            device_class: SensorDeviceClass | None,
+            state_class: SensorStateClass | None,
+            icon: str | None,
+            entity_id_override: str | None = None,
     ) -> None:
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
@@ -348,6 +355,18 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
         self.entity_id = f"sensor.{entity_id_override or mqtt_key}"
         if icon:
             self._attr_icon = icon
+        if device_class == SensorDeviceClass.TEMPERATURE:
+            self._attr_suggested_display_precision = 0
+        if device_class == SensorDeviceClass.DURATION:
+            # uptime
+            self._attr_suggested_unit_of_measurement = UnitOfTime.DAYS
+        if device_class == SensorDeviceClass.DATA_SIZE:
+            # storage pools
+            if unit == "GB":
+                self._attr_suggested_unit_of_measurement = UnitOfInformation.TERABYTES
+            # RAM
+            elif unit == "MB":
+                self._attr_suggested_unit_of_measurement = UnitOfInformation.GIGABYTES
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
@@ -360,11 +379,11 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         self._attr_native_value = mqtt_data.get(self._mqtt_key)
-        
+
         attr_key = f"{self._mqtt_key}_attributes"
         if attr_key in mqtt_data:
             self._attr_extra_state_attributes = {"clients": mqtt_data[attr_key]}
-        
+
         self.async_write_ha_state()
 
     @property
@@ -431,7 +450,7 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
         }
 
     def _generate_curve_points(
-        self, min_temp: float, max_temp: float, min_fan: float, max_fan: float
+            self, min_temp: float, max_temp: float, min_fan: float, max_fan: float
     ) -> list:
         points = []
 
@@ -443,7 +462,7 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
                 fan_pwm = max_fan
             else:
                 fan_pwm = min_fan + (temp - min_temp) * (max_fan - min_fan) / (
-                    max_temp - min_temp
+                        max_temp - min_temp
                 )
 
             fan_percent = round((fan_pwm * 100) / 255)
@@ -455,24 +474,24 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         mqtt_data = self.coordinator.data.get("mqtt_data", {})
         return (
-            "fan_curve_min_temp" in mqtt_data
-            and "fan_curve_max_temp" in mqtt_data
-            and "fan_curve_min_fan" in mqtt_data
-            and "fan_curve_max_fan" in mqtt_data
+                "fan_curve_min_temp" in mqtt_data
+                and "fan_curve_max_temp" in mqtt_data
+                and "fan_curve_min_fan" in mqtt_data
+                and "fan_curve_max_fan" in mqtt_data
         )
 
 
 class UNASNVMeSensor(CoordinatorEntity, SensorEntity):
     def __init__(
-        self,
-        coordinator: UNASDataUpdateCoordinator,
-        mqtt_key: str,
-        name: str,
-        nvme_slot: str,
-        unit: str | None,
-        device_class: SensorDeviceClass | None,
-        state_class: SensorStateClass | None,
-        icon: str | None,
+            self,
+            coordinator: UNASDataUpdateCoordinator,
+            mqtt_key: str,
+            name: str,
+            nvme_slot: str,
+            unit: str | None,
+            device_class: SensorDeviceClass | None,
+            state_class: SensorStateClass | None,
+            icon: str | None,
     ) -> None:
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
@@ -485,6 +504,8 @@ class UNASNVMeSensor(CoordinatorEntity, SensorEntity):
         self.entity_id = f"sensor.{mqtt_key}"
         if icon:
             self._attr_icon = icon
+        if device_class == SensorDeviceClass.TEMPERATURE:
+            self._attr_suggested_display_precision = 0
 
         mqtt_data = coordinator.mqtt_client.get_data()
         model = mqtt_data.get(f"unas_nvme_{nvme_slot}_model", "Unknown")
@@ -520,15 +541,15 @@ class UNASNVMeSensor(CoordinatorEntity, SensorEntity):
 
 class UNASDriveSensor(CoordinatorEntity, SensorEntity):
     def __init__(
-        self,
-        coordinator: UNASDataUpdateCoordinator,
-        mqtt_key: str,
-        name: str,
-        bay_num: str,
-        unit: str | None,
-        device_class: SensorDeviceClass | None,
-        state_class: SensorStateClass | None,
-        icon: str | None,
+            self,
+            coordinator: UNASDataUpdateCoordinator,
+            mqtt_key: str,
+            name: str,
+            bay_num: str,
+            unit: str | None,
+            device_class: SensorDeviceClass | None,
+            state_class: SensorStateClass | None,
+            icon: str | None,
     ) -> None:
         super().__init__(coordinator)
         self._mqtt_key = mqtt_key
@@ -541,6 +562,8 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
         self.entity_id = f"sensor.{mqtt_key}"
         if icon:
             self._attr_icon = icon
+        if device_class == SensorDeviceClass.TEMPERATURE:
+            self._attr_suggested_display_precision = 0
 
         mqtt_data = coordinator.mqtt_client.get_data()
         model = mqtt_data.get(f"unas_hdd_{bay_num}_model", "Unknown")
