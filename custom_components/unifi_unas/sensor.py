@@ -53,7 +53,7 @@ UNAS_SENSORS = [
     ),
     (
         "unas_fan_speed_percent",
-        "Fan Speed",
+        "Fan Speed (Percent)",
         PERCENTAGE,
         None,
         SensorStateClass.MEASUREMENT,
