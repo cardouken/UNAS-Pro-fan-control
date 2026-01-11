@@ -1,8 +1,8 @@
 # UniFi UNAS for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/release/cardouken/homeassistant-unas-pro.svg)](https://github.com/cardouken/homeassistant-unas-pro/releases)
-[![License](https://img.shields.io/github/license/cardouken/homeassistant-unas-pro.svg)](LICENSE.md)
+[![GitHub Release](https://img.shields.io/github/release/cardouken/homeassistant-unifi-unas.svg)](https://github.com/cardouken/homeassistant-unifi-unas/releases)
+[![License](https://img.shields.io/github/license/cardouken/homeassistant-unifi-unas.svg)](LICENSE.md)
 
 Monitoring and fan control for UniFi UNAS with native Home Assistant integration.
 
@@ -40,7 +40,7 @@ Then check the UniFi Drive UI and match the serial numbers to physical bay numbe
 - `/dev/sdb` - ATA Port 4 - Bay 3
 - `/dev/sdc` - ATA Port 5 - Bay 5
 
-Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unas-pro/issues) with your results to help improve device support!
+Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unifi-unas/issues) with your results to help improve device support!
 
 </details>
 
@@ -102,7 +102,7 @@ Please [open a GitHub issue](https://github.com/cardouken/homeassistant-unas-pro
 **Via HACS (Recommended):**
 
 1. HACS → Integrations → ⋮ → Custom repositories
-2. Repository: `https://github.com/cardouken/homeassistant-unas-pro`
+2. Repository: `https://github.com/cardouken/homeassistant-unifi-unas`
 3. Category: Integration → Add
 4. Install "UniFi UNAS" and restart HA
 
@@ -216,4 +216,4 @@ MIT - See [LICENSE.md](LICENSE.md)
 
 ## Support
 
-- [GitHub Issues](https://github.com/cardouken/homeassistant-unas-pro/issues)
+- [GitHub Issues](https://github.com/cardouken/homeassistant-unifi-unas/issues)

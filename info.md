@@ -26,4 +26,4 @@ Monitor and control your Ubiquiti UniFi UNAS from Home Assistant with comprehens
 
 ## Support
 
-[Documentation](https://github.com/cardouken/homeassistant-unas-pro) • [Issues](https://github.com/cardouken/homeassistant-unas-pro/issues)
+[Documentation](https://github.com/cardouken/homeassistant-unifi-unas) • [Issues](https://github.com/cardouken/homeassistant-unifi-unas/issues)

@@ -1,5 +1,5 @@
 [project]
-name = "homeassistant-unas-pro"
+name = "homeassistant-unifi-unas"
 requires-python = ">=3.12"
 
 [tool.ruff]
