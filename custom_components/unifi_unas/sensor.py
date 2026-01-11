@@ -253,9 +253,31 @@ async def _discover_and_add_drive_sensors(
         coordinator: UNASDataUpdateCoordinator,
         async_add_entities: AddEntitiesCallback,
 ) -> None:
+    from homeassistant.helpers import entity_registry as er, device_registry as dr
+    
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_bays = {key.split("_")[2] for key in mqtt_data.keys() if
                      key.startswith("unas_hdd_") and "_temperature" in key}
+
+    missing_bays = coordinator.discovered_bays - detected_bays
+    if missing_bays:
+        _LOGGER.info("Drives no longer detected in bays: %s", sorted(missing_bays))
+        coordinator.discovered_bays -= missing_bays
+        
+        entity_reg = er.async_get(coordinator.hass)
+        device_reg = dr.async_get(coordinator.hass)
+        
+        for bay in missing_bays:
+            for sensor_suffix, _, _, _, _, _ in DRIVE_SENSORS:
+                unique_id = f"{coordinator.entry.entry_id}_unas_hdd_{bay}_{sensor_suffix}"
+                if entity_id := entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id):
+                    entity_reg.async_remove(entity_id)
+                    _LOGGER.debug("Removed entity %s", entity_id)
+            
+            device_id = (DOMAIN, f"{coordinator.entry.entry_id}_hdd_{bay}")
+            if device := device_reg.async_get_device(identifiers={device_id}):
+                device_reg.async_remove_device(device.id)
+                _LOGGER.info("Removed device for HDD bay %s", bay)
 
     new_bays = detected_bays - coordinator.discovered_bays
     if not new_bays:

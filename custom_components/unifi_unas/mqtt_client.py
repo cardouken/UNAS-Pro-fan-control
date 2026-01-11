@@ -8,7 +8,7 @@ from datetime import datetime
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 
-from .const import MQTT_ROOT
+from .const import get_mqtt_root
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ class UNASMQTTClient:
         self.entry_id = entry_id
         self.mqtt_root = get_mqtt_root(entry_id)
         self._data: dict[str, Any] = {}
+        self._data_timestamps: dict[str, datetime] = {}
         self._subscriptions: list = []
         self._status: str = "unknown"
         self._last_update: datetime | None = None
@@ -151,6 +152,7 @@ class UNASMQTTClient:
             value = payload
 
         self._data[key] = value
+        self._data_timestamps[key] = datetime.now()
         self._last_update = datetime.now()
 
         if hasattr(self, "_coordinator") and self._coordinator:
@@ -159,6 +161,7 @@ class UNASMQTTClient:
     def _store_attributes(self, key: str, payload: str) -> None:
         try:
             self._data[f"{key}_attributes"] = json.loads(payload)
+            self._data_timestamps[f"{key}_attributes"] = datetime.now()
             self._last_update = datetime.now()
 
             if hasattr(self, "_coordinator") and self._coordinator:
@@ -180,4 +183,17 @@ class UNASMQTTClient:
         return True
 
     def get_data(self) -> dict[str, Any]:
+        self._cleanup_stale_data()
         return self._data.copy()
+
+    def _cleanup_stale_data(self) -> None:
+        now = datetime.now()
+        stale_keys = []
+        
+        for key, timestamp in self._data_timestamps.items():
+            if (now - timestamp).total_seconds() > 120:
+                stale_keys.append(key)
+        
+        for key in stale_keys:
+            del self._data[key]
+            del self._data_timestamps[key]
