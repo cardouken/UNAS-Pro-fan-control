@@ -21,13 +21,7 @@ from .const import (
     CONF_DEVICE_MODEL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_DEVICE_MODEL,
-    MQTT_CONTROL,
-    MQTT_SYSTEM,
-    MQTT_HDD,
-    MQTT_NVME,
-    MQTT_POOL,
-    MQTT_SMB,
-    MQTT_NFS,
+    get_mqtt_topics,
 )
 from .ssh_manager import SSHManager
 from .mqtt_client import UNASMQTTClient
@@ -245,12 +239,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     device_model = entry.data[CONF_DEVICE_MODEL]
 
     if last_deploy_version != current_version or not scripts_installed or is_dev_version:
-        await manager.deploy_scripts(device_model)
+        mqtt_root = get_mqtt_topics(entry.entry_id)["root"]
+        await manager.deploy_scripts(device_model, mqtt_root)
         new_data = dict(entry.data)
         new_data[LAST_DEPLOY_VERSION_KEY] = current_version
         hass.config_entries.async_update_entry(entry, data=new_data)
 
-    mqtt_client_instance = UNASMQTTClient(hass, entry.data[CONF_HOST])
+    mqtt_client_instance = UNASMQTTClient(hass, entry.entry_id)
     coordinator = UNASDataUpdateCoordinator(hass, manager, mqtt_client_instance, entry)
     mqtt_client_instance._coordinator = coordinator
 
@@ -268,10 +263,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _cleanup_old_mqtt_configs_on_upgrade(hass, entry)
     
     from homeassistant.components import mqtt
+    topics = get_mqtt_topics(entry.entry_id)
     scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     await mqtt.async_publish(
         hass,
-        f"{MQTT_CONTROL}/monitor_interval",
+        f"{topics['control']}/monitor_interval",
         str(scan_interval),
         qos=0,
         retain=True,
@@ -367,7 +363,8 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
             if not scripts_installed:
                 _LOGGER.warning("Scripts missing, reinstalling...")
                 device_model = self.entry.data[CONF_DEVICE_MODEL]
-                await self.ssh_manager.deploy_scripts(device_model)
+                mqtt_root = get_mqtt_topics(self.entry.entry_id)["root"]
+                await self.ssh_manager.deploy_scripts(device_model, mqtt_root)
 
             monitor_running = await self.ssh_manager.service_running("unas_monitor")
             fan_control_running = await self.ssh_manager.service_running("fan_control")
@@ -394,5 +391,6 @@ class UNASDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_reinstall_scripts(self) -> None:
         device_model = self.entry.data[CONF_DEVICE_MODEL]
-        await self.ssh_manager.deploy_scripts(device_model)
+        mqtt_root = get_mqtt_topics(self.entry.entry_id)["root"]
+        await self.ssh_manager.deploy_scripts(device_model, mqtt_root)
         await self.async_request_refresh()

@@ -30,12 +30,19 @@ DEVICE_MODELS = {
 }
 
 # MQTT topic structure
-MQTT_ROOT = "unas"
-MQTT_AVAILABILITY = f"{MQTT_ROOT}/availability"
-MQTT_CONTROL = f"{MQTT_ROOT}/control"
-MQTT_SYSTEM = f"{MQTT_ROOT}/system"
-MQTT_HDD = f"{MQTT_ROOT}/hdd"
-MQTT_NVME = f"{MQTT_ROOT}/nvme"
-MQTT_POOL = f"{MQTT_ROOT}/pool"
-MQTT_SMB = f"{MQTT_ROOT}/smb"
-MQTT_NFS = f"{MQTT_ROOT}/nfs"
+def get_mqtt_root(entry_id: str) -> str:
+    return f"unas/{entry_id[:8]}"
+
+def get_mqtt_topics(entry_id: str):
+    root = get_mqtt_root(entry_id)
+    return {
+        "root": root,
+        "availability": f"{root}/availability",
+        "control": f"{root}/control",
+        "system": f"{root}/system",
+        "hdd": f"{root}/hdd",
+        "nvme": f"{root}/nvme",
+        "pool": f"{root}/pool",
+        "smb": f"{root}/smb",
+        "nfs": f"{root}/nfs",
+    }

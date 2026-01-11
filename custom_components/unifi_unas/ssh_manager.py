@@ -85,11 +85,12 @@ class SSHManager:
         _LOGGER.debug("Service %s running: %s", service_name, running)
         return running
 
-    def _replace_mqtt_credentials(self, script: str) -> str:
+    def _replace_mqtt_credentials(self, script: str, mqtt_root: str) -> str:
         replacements = {
             "MQTT_HOST": self.mqtt_host,
             "MQTT_USER": self.mqtt_user,
             "MQTT_PASS": self.mqtt_password,
+            "MQTT_ROOT": mqtt_root,
         }
 
         for key, value in replacements.items():
@@ -98,7 +99,7 @@ class SSHManager:
 
         return script
 
-    async def deploy_scripts(self, device_model: str) -> None:
+    async def deploy_scripts(self, device_model: str, mqtt_root: str) -> None:
         await self.connect()
         _LOGGER.info("Deploying scripts for device model: %s", device_model)
 
@@ -113,8 +114,8 @@ class SSHManager:
                 fan_control_service = await f.read()
 
             if self.mqtt_host and self.mqtt_user and self.mqtt_password:
-                monitor_script = self._replace_mqtt_credentials(monitor_script)
-                fan_control_script = self._replace_mqtt_credentials(fan_control_script)
+                monitor_script = self._replace_mqtt_credentials(monitor_script, mqtt_root)
+                fan_control_script = self._replace_mqtt_credentials(fan_control_script, mqtt_root)
 
             monitor_script = monitor_script.replace('DEVICE_MODEL = "UNAS_PRO"', f'DEVICE_MODEL = "{device_model}"')
 

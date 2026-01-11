@@ -44,9 +44,10 @@ Examples:
 
 
 class UNASMQTTClient:
-    def __init__(self, hass: HomeAssistant, unas_host: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self.hass = hass
-        self.unas_host = unas_host
+        self.entry_id = entry_id
+        self.mqtt_root = get_mqtt_root(entry_id)
         self._data: dict[str, Any] = {}
         self._subscriptions: list = []
         self._status: str = "unknown"
@@ -57,13 +58,12 @@ class UNASMQTTClient:
             _LOGGER.error("MQTT integration not loaded")
             return
 
-        # subscribe to entire UNAS namespace
         try:
-            sub = await mqtt.async_subscribe(self.hass, f"{MQTT_ROOT}/#", self._handle_message, qos=0)
+            sub = await mqtt.async_subscribe(self.hass, f"{self.mqtt_root}/#", self._handle_message, qos=0)
             self._subscriptions.append(sub)
-            _LOGGER.debug("Subscribed to MQTT topic: %s/#", MQTT_ROOT)
+            _LOGGER.debug("Subscribed to MQTT topic: %s/#", self.mqtt_root)
         except Exception as err:
-            _LOGGER.error("Failed to subscribe to %s/#: %s", MQTT_ROOT, err)
+            _LOGGER.error("Failed to subscribe to %s/#: %s", self.mqtt_root, err)
 
     async def async_unsubscribe(self) -> None:
         for unsub in self._subscriptions:
@@ -73,32 +73,34 @@ class UNASMQTTClient:
 
     @callback
     def _handle_message(self, msg) -> None:
-        parts = msg.topic.split("/")
+        topic = msg.topic
+        if not topic.startswith(self.mqtt_root):
+            return
         
-        if parts[0] != MQTT_ROOT:
+        parts = topic[len(self.mqtt_root):].lstrip("/").split("/")
+        if not parts:
             return
         
         num_parts = len(parts)
         
-        if num_parts == 2:
+        if num_parts == 1:
+            self._handle_one_part(parts, msg.payload)
+        elif num_parts == 2:
             self._handle_two_part(parts, msg.payload)
         elif num_parts == 3:
             self._handle_three_part(parts, msg.payload)
         elif num_parts == 4:
             self._handle_four_part(parts, msg.payload)
-        elif num_parts == 5:
-            self._handle_five_part(parts, msg.payload)
 
-    def _handle_two_part(self, parts, payload):
-        # unas/availability
-        if parts[1] == "availability":
+    def _handle_one_part(self, parts, payload):
+        if parts[0] == "availability":
             self._status = payload
             _LOGGER.debug("UNAS status: %s", self._status)
             if hasattr(self, "_coordinator") and self._coordinator:
                 self.hass.async_create_task(self._coordinator.async_request_refresh())
 
-    def _handle_three_part(self, parts, payload):
-        category, item = parts[1], parts[2]
+    def _handle_two_part(self, parts, payload):
+        category, item = parts[0], parts[1]
         
         # unas/system/<metric>
         if category == "system":
@@ -122,8 +124,8 @@ class UNASMQTTClient:
         elif category == "control":
             self._store_value(item, payload)
 
-    def _handle_four_part(self, parts, payload):
-        category, identifier, metric = parts[1], parts[2], parts[3]
+    def _handle_three_part(self, parts, payload):
+        category, identifier, metric = parts[0], parts[1], parts[2]
         
         # unas/hdd/<bay>/<metric> or unas/nvme/<slot>/<metric>
         if category in ("hdd", "nvme"):
@@ -137,10 +139,9 @@ class UNASMQTTClient:
         elif category == "control" and identifier == "fan" and metric == "mode":
             self._store_value("fan_mode", payload)
 
-    def _handle_five_part(self, parts, payload):
-        # unas/control/fan/curve/<param>
-        if parts[1:4] == ["control", "fan", "curve"]:
-            param = parts[4]
+    def _handle_four_part(self, parts, payload):
+        if parts[0:3] == ["control", "fan", "curve"]:
+            param = parts[3]
             self._store_value(f"fan_curve_{param}", payload)
 
     def _store_value(self, key: str, payload: str) -> None:
@@ -151,7 +152,6 @@ class UNASMQTTClient:
 
         self._data[key] = value
         self._last_update = datetime.now()
-        # _LOGGER.debug("MQTT: %s = %s", key, value)
 
         if hasattr(self, "_coordinator") and self._coordinator:
             self.hass.async_create_task(self._coordinator.async_request_refresh())

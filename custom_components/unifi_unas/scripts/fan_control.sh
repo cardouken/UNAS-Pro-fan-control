@@ -5,9 +5,7 @@ set -euo pipefail
 MQTT_HOST="REPLACE_ME"
 MQTT_USER="REPLACE_ME"
 MQTT_PASS="REPLACE_ME"
-
-# MQTT topic structure
-MQTT_ROOT="unas"
+MQTT_ROOT="REPLACE_ME"
 MQTT_SYSTEM="${MQTT_ROOT}/system"
 MQTT_CONTROL="${MQTT_ROOT}/control"
 MQTT_FAN="${MQTT_CONTROL}/fan"
