@@ -130,10 +130,10 @@ class SSHManager:
 
             await self.execute_command("apt-get update && apt-get install -y mosquitto-clients")
             
-            stdout, _ = await self.execute_command("dpkg -l python3-paho-mqtt 2>/dev/null | grep '^ii' || echo 'not_installed'")
+            stdout, _ = await self.execute_command("pip3 show paho-mqtt 2>/dev/null || echo 'not_installed'")
             if "not_installed" in stdout:
-                _LOGGER.info("Installing python3-paho-mqtt on UNAS...")
-                await self.execute_command("apt-get install -y python3-paho-mqtt")
+                _LOGGER.info("Installing paho-mqtt on UNAS...")
+                await self.execute_command("pip3 install paho-mqtt")
 
             await self.execute_command("systemctl daemon-reload")
             await self.execute_command("systemctl enable unas_monitor")

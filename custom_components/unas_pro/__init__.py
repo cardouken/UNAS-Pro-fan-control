@@ -195,8 +195,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await manager.execute_command("rm -f /tmp/fan_control_last_pwm")
             await manager.execute_command("rm -f /tmp/fan_control_state")
             await manager.execute_command("systemctl daemon-reload")
-            await manager.execute_command("apt remove python3-paho-mqtt -y")
             await manager.execute_command("apt remove mosquitto-clients -y")
+            await manager.execute_command("pip3 uninstall paho-mqtt -y")
             await manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm1_enable || true")
             await manager.execute_command("echo 2 > /sys/class/hwmon/hwmon0/pwm2_enable || true")
         except Exception as err:
