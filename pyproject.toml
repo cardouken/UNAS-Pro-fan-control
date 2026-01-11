@@ -1,10 +1,22 @@
 [project]
 name = "homeassistant-unas-pro"
-version = "0.4.0-dev"
-description = "Monitoring and fan control for UniFi UNAS Pro with native Home Assistant integration."
-requires-python = ">=3.14"
-dependencies = [
-    "aiofiles>=25.1.0",
-    "asyncssh>=2.22.0",
-    "homeassistant>=2025.12.5",
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
 ]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
