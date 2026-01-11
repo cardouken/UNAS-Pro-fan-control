@@ -14,9 +14,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-MQTT_HOST = "192.168.3.444"
-MQTT_USER = "username"
-MQTT_PASS = "password"
+MQTT_HOST = "REPLACE_ME"
+MQTT_USER = "REPLACE_ME"
+MQTT_PASS = "REPLACE_ME"
 DEFAULT_MONITOR_INTERVAL = 30
 MONITOR_INTERVAL_TOPIC = "homeassistant/unas/monitor_interval"
 

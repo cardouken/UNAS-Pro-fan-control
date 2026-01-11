@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-MQTT_HOST="192.168.1.111"
-MQTT_USER="homeassistant"
-MQTT_PASS="unas_password_123"
+MQTT_HOST="REPLACE_ME"
+MQTT_USER="REPLACE_ME"
+MQTT_PASS="REPLACE_ME"
 
 HDD_DEVICES=(sda sdb sdc sdd sde sdf sdg)
 
