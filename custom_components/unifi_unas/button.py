@@ -20,7 +20,11 @@ async def async_setup_entry(
         "coordinator"
     ]
 
-    async_add_entities([UNASReinstallScriptsButton(coordinator)])
+    async_add_entities([
+        UNASReinstallScriptsButton(coordinator),
+        UNASRebootButton(coordinator),
+        UNASShutdownButton(coordinator),
+    ])
 
 
 class UNASReinstallScriptsButton(CoordinatorEntity, ButtonEntity):
@@ -43,3 +47,47 @@ class UNASReinstallScriptsButton(CoordinatorEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.async_reinstall_scripts()
+
+
+class UNASRebootButton(CoordinatorEntity, ButtonEntity):
+    def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_has_entity_name = True
+        self._attr_name = "Reboot"
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_reboot"
+        self._attr_icon = "mdi:restart"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name="UNAS",
+            manufacturer="Ubiquiti",
+            model="UniFi UNAS",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.ssh_manager._conn is not None
+
+    async def async_press(self) -> None:
+        await self.coordinator.ssh_manager.execute_command("reboot")
+
+
+class UNASShutdownButton(CoordinatorEntity, ButtonEntity):
+    def __init__(self, coordinator: UNASDataUpdateCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_has_entity_name = True
+        self._attr_name = "Shutdown"
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_shutdown"
+        self._attr_icon = "mdi:power"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name="UNAS",
+            manufacturer="Ubiquiti",
+            model="UniFi UNAS",
+        )
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.ssh_manager._conn is not None
+
+    async def async_press(self) -> None:
+        await self.coordinator.ssh_manager.execute_command("shutdown -h now")
