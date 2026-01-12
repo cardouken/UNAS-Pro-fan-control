@@ -9,7 +9,7 @@ Monitoring and fan control for UniFi UNAS with native Home Assistant integration
 ## Supported Devices
 
 - **UNAS Pro** – Fully supported
-- **UNAS Pro 8** – Fully supported (bays 7-8 possibly not mapped correctly, assumed sequential)
+- **UNAS Pro 8** – Fully supported
 - **UNAS Pro 4** – Unconfirmed, but very likely supported, bays possibly not mapped correctly
 - **UNAS 4** – Unconfirmed
 - **UNAS 2** – Unconfirmed
@@ -71,6 +71,7 @@ improve device support!
 - Fan speed (PWM & percentage)
 - Storage pool metrics
 - System info & uptime
+- NVMe drive temperatures, SMART health
 - SMB/NFS connections with client/share attributes
 
 ### Drives
