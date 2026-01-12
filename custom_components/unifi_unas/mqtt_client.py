@@ -191,6 +191,9 @@ class UNASMQTTClient:
         stale_keys = []
         
         for key, timestamp in self._data_timestamps.items():
+            if key.startswith(("fan_curve_", "fan_mode", "monitor_interval")):
+                continue
+            
             if (now - timestamp).total_seconds() > 120:
                 stale_keys.append(key)
         
