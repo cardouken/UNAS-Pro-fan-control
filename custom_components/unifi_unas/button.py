@@ -65,7 +65,7 @@ class UNASRebootButton(CoordinatorEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.ssh_manager._conn is not None
+        return self.coordinator.last_update_success
 
     async def async_press(self) -> None:
         await self.coordinator.ssh_manager.execute_command("reboot")
@@ -87,7 +87,7 @@ class UNASShutdownButton(CoordinatorEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.ssh_manager._conn is not None
+        return self.coordinator.last_update_success
 
     async def async_press(self) -> None:
         await self.coordinator.ssh_manager.execute_command("shutdown -h now")
