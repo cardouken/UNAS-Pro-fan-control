@@ -68,13 +68,22 @@ update_state_from_mqtt() {
     sed -i "s/^${var_name}=.*/${var_name}=${payload}/" "$STATE_FILE"
 }
 
-# Fetch retained MQTT messages on startup (if available)
+# Fetch retained MQTT messages on startup (retry up to 30 times every 2 seconds in case MQTT connection not ready yet)
 echo "Fetching MQTT state..."
-MQTT_OUTPUT=$(timeout 5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
-    -t "${MQTT_FAN}/mode" \
-    -t "${MQTT_FAN}/curve/+" \
-    -C 5 \
-    -F "%t %p" 2>/dev/null || true)
+MQTT_OUTPUT=""
+for i in {1..30}; do
+    MQTT_OUTPUT=$(timeout 5 mosquitto_sub -h "$MQTT_HOST" -u "$MQTT_USER" -P "$MQTT_PASS" \
+        -t "${MQTT_FAN}/mode" \
+        -t "${MQTT_FAN}/curve/+" \
+        -C 5 \
+        -F "%t %p" 2>/dev/null || true)
+    
+    if [ -n "$MQTT_OUTPUT" ]; then
+        break
+    fi
+    
+    [ "$i" -lt 30 ] && sleep 2
+done
 
 if [ -n "$MQTT_OUTPUT" ]; then
     echo "$MQTT_OUTPUT" | while read -r topic payload; do
