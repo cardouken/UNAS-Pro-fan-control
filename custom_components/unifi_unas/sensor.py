@@ -254,6 +254,7 @@ async def _discover_and_add_drive_sensors(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     from homeassistant.helpers import entity_registry as er, device_registry as dr
+    from homeassistant.components import mqtt
     
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_bays = {key.split("_")[2] for key in mqtt_data.keys() if
@@ -267,12 +268,22 @@ async def _discover_and_add_drive_sensors(
         entity_reg = er.async_get(coordinator.hass)
         device_reg = dr.async_get(coordinator.hass)
         
+        mqtt_root = coordinator.mqtt_client.mqtt_root
+        
         for bay in missing_bays:
             for sensor_suffix, _, _, _, _, _ in DRIVE_SENSORS:
                 unique_id = f"{coordinator.entry.entry_id}_unas_hdd_{bay}_{sensor_suffix}"
                 if entity_id := entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id):
                     entity_reg.async_remove(entity_id)
                     _LOGGER.debug("Removed entity %s", entity_id)
+                
+                await mqtt.async_publish(
+                    coordinator.hass,
+                    f"{mqtt_root}/hdd/{bay}/{sensor_suffix}",
+                    "",
+                    qos=0,
+                    retain=True,
+                )
             
             device_id = (DOMAIN, f"{coordinator.entry.entry_id}_hdd_{bay}")
             if device := device_reg.async_get_device(identifiers={device_id}):
