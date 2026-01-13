@@ -28,6 +28,8 @@ MQTT_SMB = f"{MQTT_ROOT}/smb"
 MQTT_NFS = f"{MQTT_ROOT}/nfs"
 MQTT_CONTROL = f"{MQTT_ROOT}/control"
 MONITOR_INTERVAL_TOPIC = f"{MQTT_CONTROL}/monitor_interval"
+SHARED_TEMP_FILE = "/tmp/unas_hdd_temp"
+MONITOR_INTERVAL_FILE = "/tmp/unas_monitor_interval"
 
 DEVICE_MODEL = "UNAS_PRO"
 
@@ -121,6 +123,12 @@ class UNASMonitor:
                     old = self.monitor_interval
                     self.monitor_interval = new_interval
                     logger.info(f"Monitor interval: {old}s -> {new_interval}s")
+                    # write interval to shared file for fan control script
+                    try:
+                        with open(MONITOR_INTERVAL_FILE, 'w') as f:
+                            f.write(str(new_interval))
+                    except:
+                        pass
             except (ValueError, TypeError):
                 pass
 
@@ -142,6 +150,22 @@ class UNASMonitor:
             return result.stdout
         except:
             return ""
+
+    def get_max_hdd_temp(self):
+        max_temp = 0
+        for device_path in Path('/dev').glob('sd?'):
+            try:
+                output = self.run_cmd(['smartctl', '-A', f'/dev/{device_path.name}'], timeout=5)
+                for line in output.split('\n'):
+                    if '194 Temperature_Celsius' in line:
+                        parts = line.split()
+                        if len(parts) >= 10:
+                            temp = int(parts[9])
+                            max_temp = max(max_temp, temp)
+                        break
+            except:
+                continue
+        return max_temp
 
     def get_system_metrics(self):
         data = {}
@@ -179,6 +203,13 @@ class UNASMonitor:
         except:
             data['fan_speed'] = 0
             data['fan_speed_percent'] = 0
+
+        max_hdd_temp = self.get_max_hdd_temp()
+        try:
+            with open(SHARED_TEMP_FILE, 'w') as f:
+                f.write(str(max_hdd_temp))
+        except:
+            pass
 
         return data
 
@@ -597,6 +628,13 @@ class UNASMonitor:
 
     def run(self):
         logger.info(f"UNAS monitor started (interval: {self.monitor_interval}s)")
+        
+        # write initial interval to shared file for fan control script
+        try:
+            with open(MONITOR_INTERVAL_FILE, 'w') as f:
+                f.write(str(self.monitor_interval))
+        except:
+            pass
 
         while True:
             try:

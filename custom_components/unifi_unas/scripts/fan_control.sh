@@ -14,6 +14,8 @@ HDD_DEVICES=(sda sdb sdc sdd sde sdf sdg)
 
 STATE_FILE="/tmp/fan_control_state"
 LAST_PWM_FILE="/tmp/fan_control_last_pwm"
+SHARED_TEMP_FILE="/tmp/unas_hdd_temp"
+MONITOR_INTERVAL_FILE="/tmp/unas_monitor_interval"
 
 # Default values
 FAN_MODE="unas_managed"
@@ -110,14 +112,49 @@ cleanup() {
 }
 trap cleanup EXIT TERM INT
 
-get_max_hdd_temp() {
+get_max_hdd_temp_fallback() {
     local max=0 temp
     for dev in "${HDD_DEVICES[@]}"; do
         [ -e "/dev/$dev" ] || continue
-        temp=$(timeout 5 smartctl -a "/dev/$dev" 2>/dev/null | awk '/194 Temperature_Celsius/ {print $10}' || echo 0)
+        temp=$(timeout 5 smartctl -A "/dev/$dev" 2>/dev/null | awk '/194 Temperature_Celsius/ {print $10}' || echo 0)
         [[ "$temp" =~ ^[0-9]+$ ]] && [ "$temp" -gt "$max" ] && max=$temp
     done
     echo "$max"
+}
+
+get_stale_threshold() {
+    local monitor_interval=30
+    if [ -f "$MONITOR_INTERVAL_FILE" ]; then
+        monitor_interval=$(cat "$MONITOR_INTERVAL_FILE" 2>/dev/null || echo 30)
+    fi
+    echo $((monitor_interval * 2 + 10))
+}
+
+get_hdd_temp_with_age() {
+    local file_age=0
+
+    if [ -f "$SHARED_TEMP_FILE" ]; then
+        file_age=$(($(date +%s) - $(stat -c %Y "$SHARED_TEMP_FILE" 2>/dev/null || echo 0)))
+        local stale_threshold
+        stale_threshold=$(get_stale_threshold)
+
+        if [ "$file_age" -lt "$stale_threshold" ]; then
+            local temp
+            temp=$(cat "$SHARED_TEMP_FILE" 2>/dev/null || get_max_hdd_temp_fallback)
+            echo "$temp:$file_age"
+            return
+        else
+            echo "WARNING: Shared temp file stale (${file_age}s), polling HDD temps directly" >&2
+            temp=$(get_max_hdd_temp_fallback)
+            echo "$temp:fallback"
+            return
+        fi
+    else
+        echo "WARNING: Shared temp file missing, polling HDD temps directly" >&2
+        local temp
+        temp=$(get_max_hdd_temp_fallback)
+        echo "$temp:fallback"
+    fi
 }
 
 calculate_pwm() {
@@ -156,11 +193,19 @@ set_fan_speed() {
         echo "UNAS MANAGED MODE: $pwm PWM ($((pwm * 100 / 255))%)"
 
     elif [ "$FAN_MODE" = "auto" ]; then
-        local temp
-        temp=$(get_max_hdd_temp)
+        local temp_info temp file_age
+        temp_info=$(get_hdd_temp_with_age)
+        temp="${temp_info%%:*}"
+        file_age="${temp_info##*:}"
+
         pwm=$(calculate_pwm "$temp" "$MIN_TEMP" "$MAX_TEMP" "$MIN_FAN" "$MAX_FAN")
         set_pwm "$pwm"
-        echo "CUSTOM CURVE MODE: ${temp}°C → $pwm PWM ($((pwm * 100 / MAX_FAN))%)"
+
+        if [ "$file_age" = "fallback" ]; then
+            echo "CUSTOM CURVE MODE: ${temp}°C (direct poll) → $pwm PWM ($((pwm * 100 / MAX_FAN))%)"
+        else
+            echo "CUSTOM CURVE MODE: ${temp}°C (${file_age}s old) → $pwm PWM ($((pwm * 100 / MAX_FAN))%)"
+        fi
 
     elif [[ "$FAN_MODE" =~ ^[0-9]+$ ]] && [ "$FAN_MODE" -ge 0 ] && [ "$FAN_MODE" -le 255 ]; then
         set_pwm "$FAN_MODE"
