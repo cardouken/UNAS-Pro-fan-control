@@ -313,9 +313,42 @@ async def _discover_and_add_nvme_sensors(
         coordinator: UNASDataUpdateCoordinator,
         async_add_entities: AddEntitiesCallback,
 ) -> None:
+    from homeassistant.helpers import entity_registry as er, device_registry as dr
+    from homeassistant.components import mqtt
+    
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_nvmes = {key.split("_")[2] for key in mqtt_data.keys() if
                       key.startswith("unas_nvme_") and "_temperature" in key}
+
+    missing_nvmes = coordinator.discovered_nvmes - detected_nvmes
+    if missing_nvmes:
+        _LOGGER.info("NVMe drives no longer detected in slots: %s", sorted(missing_nvmes))
+        coordinator.discovered_nvmes -= missing_nvmes
+        
+        entity_reg = er.async_get(coordinator.hass)
+        device_reg = dr.async_get(coordinator.hass)
+        
+        mqtt_root = coordinator.mqtt_client.mqtt_root
+        
+        for slot in missing_nvmes:
+            for sensor_suffix, _, _, _, _, _ in NVME_SENSORS:
+                unique_id = f"{coordinator.entry.entry_id}_unas_nvme_{slot}_{sensor_suffix}"
+                if entity_id := entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id):
+                    entity_reg.async_remove(entity_id)
+                    _LOGGER.debug("Removed entity %s", entity_id)
+                
+                await mqtt.async_publish(
+                    coordinator.hass,
+                    f"{mqtt_root}/nvme/{slot}/{sensor_suffix}",
+                    "",
+                    qos=0,
+                    retain=True,
+                )
+            
+            device_id = (DOMAIN, f"{coordinator.entry.entry_id}_nvme_{slot}")
+            if device := device_reg.async_get_device(identifiers={device_id}):
+                device_reg.async_remove_device(device.id)
+                _LOGGER.info("Removed device for NVMe slot %s", slot)
 
     new_nvmes = detected_nvmes - coordinator.discovered_nvmes
     if not new_nvmes:
@@ -340,9 +373,37 @@ async def _discover_and_add_pool_sensors(
         coordinator: UNASDataUpdateCoordinator,
         async_add_entities: AddEntitiesCallback,
 ) -> None:
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.components import mqtt
+    
     mqtt_data = coordinator.mqtt_client.get_data()
     detected_pools = {key.replace("unas_pool", "").replace("_usage", "") for key in mqtt_data.keys() if
                       key.startswith("unas_pool") and "_usage" in key}
+
+    missing_pools = coordinator.discovered_pools - detected_pools
+    if missing_pools:
+        _LOGGER.info("Storage pools no longer detected: %s", sorted(missing_pools))
+        coordinator.discovered_pools -= missing_pools
+        
+        entity_reg = er.async_get(coordinator.hass)
+        mqtt_root = coordinator.mqtt_client.mqtt_root
+        
+        for pool_num in missing_pools:
+            for sensor_suffix, _, _, _, _, _ in STORAGE_POOL_SENSORS:
+                unique_id = f"{coordinator.entry.entry_id}_unas_pool{pool_num}_{sensor_suffix}"
+                if entity_id := entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id):
+                    entity_reg.async_remove(entity_id)
+                    _LOGGER.debug("Removed entity %s", entity_id)
+                
+                await mqtt.async_publish(
+                    coordinator.hass,
+                    f"{mqtt_root}/pool/{pool_num}/{sensor_suffix}",
+                    "",
+                    qos=0,
+                    retain=True,
+                )
+        
+        _LOGGER.info("Removed entities for %d pools", len(missing_pools))
 
     new_pools = detected_pools - coordinator.discovered_pools
     if not new_pools:
