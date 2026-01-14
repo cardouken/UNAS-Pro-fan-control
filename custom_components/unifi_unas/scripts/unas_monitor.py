@@ -151,21 +151,12 @@ class UNASMonitor:
         except:
             return ""
 
-    def get_max_hdd_temp(self):
-        max_temp = 0
-        for device_path in Path('/dev').glob('sd?'):
-            try:
-                output = self.run_cmd(['smartctl', '-A', f'/dev/{device_path.name}'], timeout=5)
-                for line in output.split('\n'):
-                    if '194 Temperature_Celsius' in line:
-                        parts = line.split()
-                        if len(parts) >= 10:
-                            temp = int(parts[9])
-                            max_temp = max(max_temp, temp)
-                        break
-            except:
-                continue
-        return max_temp
+    def write_max_hdd_temp(self, temp):
+        try:
+            with open(SHARED_TEMP_FILE, 'w') as f:
+                f.write(str(temp))
+        except:
+            pass
 
     def get_system_metrics(self):
         data = {}
@@ -203,13 +194,6 @@ class UNASMonitor:
         except:
             data['fan_speed'] = 0
             data['fan_speed_percent'] = 0
-
-        max_hdd_temp = self.get_max_hdd_temp()
-        try:
-            with open(SHARED_TEMP_FILE, 'w') as f:
-                f.write(str(max_hdd_temp))
-        except:
-            pass
 
         return data
 
@@ -329,6 +313,7 @@ class UNASMonitor:
 
         drives = []
         current_drive_map = {}
+        max_temp = 0
         now = time.time()
 
         for device_path in Path('/dev').glob('sd?'):
@@ -352,13 +337,16 @@ class UNASMonitor:
 
             serial = data.get('serial_number', 'Unknown')
 
+            temp = data.get('temperature', {}).get('current', 0)
+            max_temp = max(max_temp, temp)
+
             drive = {
                 'bay': bay,
                 'model': data.get('model_name') or data.get('product', 'Unknown'),
                 'serial': serial,
                 'firmware': data.get('firmware_version', 'Unknown'),
                 'status': "Optimal" if data.get('smart_status', {}).get('passed') else "Warning",
-                'temperature': data.get('temperature', {}).get('current', 0)
+                'temperature': temp
             }
 
             rotation = data.get('rotation_rate', 0)
@@ -410,6 +398,7 @@ class UNASMonitor:
                 del self.drive_removed_at[serial]
 
         self.previous_drive_map = current_drive_map
+        self.write_max_hdd_temp(max_temp)
         return drives
 
     def get_nvme_drives(self):
