@@ -22,7 +22,7 @@ FAN_CURVE_PARAMS = [
     ("min_temp", "Min Temperature", 20, 50, 40, "°C", "mdi:thermometer-low"),
     ("max_temp", "Max Temperature", 30, 60, 50, "°C", "mdi:thermometer-high"),
     ("min_fan", "Min Fan Speed", 0, 100, 30, "%", "mdi:fan-speed-1"),
-    ("max_fan", "Max Fan Speed", 0, 100, 100, "%", "mdi:fan-speed-3"),
+    ("max_fan", "Max Fan Speed", 1, 100, 100, "%", "mdi:fan-speed-3"),
 ]
 
 
@@ -225,16 +225,13 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
             self.hass, self._mqtt_topic, message_received, qos=0
         )
 
-        # Set default after brief delay if no MQTT value received
-        await self.hass.async_add_executor_job(self._init_default)
+        self.hass.loop.call_later(2.0, self._maybe_init_default)
 
-    def _init_default(self) -> None:
-        import time
-        time.sleep(1)
-        
+    def _maybe_init_default(self) -> None:
         if self._attr_native_value is None:
             self._attr_native_value = int(self._default)
-            self.hass.add_job(self._publish_to_mqtt, self._default)
+            self.hass.async_create_task(self._publish_to_mqtt(self._default))
+            self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         if self._unsubscribe:

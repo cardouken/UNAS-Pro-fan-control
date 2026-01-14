@@ -127,7 +127,7 @@ class UNASMonitor:
                     try:
                         with open(MONITOR_INTERVAL_FILE, 'w') as f:
                             f.write(str(new_interval))
-                    except:
+                    except OSError:
                         pass
             except (ValueError, TypeError):
                 pass
@@ -148,14 +148,14 @@ class UNASMonitor:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, shell=isinstance(cmd, str))
             return result.stdout
-        except:
+        except (subprocess.SubprocessError, OSError):
             return ""
 
     def write_max_hdd_temp(self, temp):
         try:
             with open(SHARED_TEMP_FILE, 'w') as f:
                 f.write(str(temp))
-        except:
+        except OSError:
             pass
 
     def get_system_metrics(self):
@@ -183,7 +183,7 @@ class UNASMonitor:
         try:
             with open('/sys/class/thermal/thermal_zone0/temp') as f:
                 data['cpu_temp'] = int(f.read().strip()) // 1000
-        except:
+        except (OSError, ValueError):
             data['cpu_temp'] = 0
 
         try:
@@ -191,7 +191,7 @@ class UNASMonitor:
                 pwm = int(f.read().strip())
                 data['fan_speed'] = pwm
                 data['fan_speed_percent'] = int((pwm * 100) / 255)
-        except:
+        except (OSError, ValueError):
             data['fan_speed'] = 0
             data['fan_speed_percent'] = 0
 
@@ -622,7 +622,7 @@ class UNASMonitor:
         try:
             with open(MONITOR_INTERVAL_FILE, 'w') as f:
                 f.write(str(self.monitor_interval))
-        except:
+        except OSError:
             pass
 
         while True:

@@ -165,10 +165,17 @@ class UNASMQTTClient:
             self._store_value(f"fan_curve_{param}", payload)
 
     def _store_value(self, key: str, payload: str) -> None:
+        if not payload:
+            return
+        
+        value: str | int | float = payload
         try:
-            value = float(payload) if "." in payload else int(payload)
+            if "." in payload and payload.replace(".", "", 1).replace("-", "", 1).isdigit():
+                value = float(payload)
+            elif payload.lstrip("-").isdigit():
+                value = int(payload)
         except (ValueError, TypeError):
-            value = payload
+            pass
 
         self._data[key] = value
         self._data_timestamps[key] = datetime.now()
