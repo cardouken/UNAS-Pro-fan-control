@@ -28,6 +28,8 @@ MQTT_SMB = f"{MQTT_ROOT}/smb"
 MQTT_NFS = f"{MQTT_ROOT}/nfs"
 MQTT_CONTROL = f"{MQTT_ROOT}/control"
 MONITOR_INTERVAL_TOPIC = f"{MQTT_CONTROL}/monitor_interval"
+SHARED_TEMP_FILE = "/tmp/unas_hdd_temp"
+MONITOR_INTERVAL_FILE = "/tmp/unas_monitor_interval"
 
 DEVICE_MODEL = "UNAS_PRO"
 
@@ -121,6 +123,12 @@ class UNASMonitor:
                     old = self.monitor_interval
                     self.monitor_interval = new_interval
                     logger.info(f"Monitor interval: {old}s -> {new_interval}s")
+                    # write interval to shared file for fan control script
+                    try:
+                        with open(MONITOR_INTERVAL_FILE, 'w') as f:
+                            f.write(str(new_interval))
+                    except:
+                        pass
             except (ValueError, TypeError):
                 pass
 
@@ -142,6 +150,13 @@ class UNASMonitor:
             return result.stdout
         except:
             return ""
+
+    def write_max_hdd_temp(self, temp):
+        try:
+            with open(SHARED_TEMP_FILE, 'w') as f:
+                f.write(str(temp))
+        except:
+            pass
 
     def get_system_metrics(self):
         data = {}
@@ -298,6 +313,7 @@ class UNASMonitor:
 
         drives = []
         current_drive_map = {}
+        max_temp = 0
         now = time.time()
 
         for device_path in Path('/dev').glob('sd?'):
@@ -321,13 +337,16 @@ class UNASMonitor:
 
             serial = data.get('serial_number', 'Unknown')
 
+            temp = data.get('temperature', {}).get('current', 0)
+            max_temp = max(max_temp, temp)
+
             drive = {
                 'bay': bay,
                 'model': data.get('model_name') or data.get('product', 'Unknown'),
                 'serial': serial,
                 'firmware': data.get('firmware_version', 'Unknown'),
                 'status': "Optimal" if data.get('smart_status', {}).get('passed') else "Warning",
-                'temperature': data.get('temperature', {}).get('current', 0)
+                'temperature': temp
             }
 
             rotation = data.get('rotation_rate', 0)
@@ -379,6 +398,7 @@ class UNASMonitor:
                 del self.drive_removed_at[serial]
 
         self.previous_drive_map = current_drive_map
+        self.write_max_hdd_temp(max_temp)
         return drives
 
     def get_nvme_drives(self):
@@ -597,6 +617,13 @@ class UNASMonitor:
 
     def run(self):
         logger.info(f"UNAS monitor started (interval: {self.monitor_interval}s)")
+        
+        # write initial interval to shared file for fan control script
+        try:
+            with open(MONITOR_INTERVAL_FILE, 'w') as f:
+                f.write(str(self.monitor_interval))
+        except:
+            pass
 
         while True:
             try:

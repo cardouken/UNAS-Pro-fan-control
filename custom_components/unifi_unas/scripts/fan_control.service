@@ -1,6 +1,6 @@
 [Unit]
 Description=Fan Control Based on Temperatures
-After=network-online.target
+After=network-online.target unas_monitor.service
 Wants=network-online.target
 
 [Service]

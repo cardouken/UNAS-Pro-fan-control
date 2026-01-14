@@ -28,6 +28,7 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_DEVICE_MODEL,
     DEVICE_MODELS,
+    get_mqtt_topics,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -161,11 +162,17 @@ class UNASProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             result = {"rc": None}
 
-            def on_connect(_client, _userdata, _flags, rc):
-                result["rc"] = rc
-                _client.disconnect()
-
-            client = mqtt_client.Client()
+            try:
+                client = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION2)
+                def on_connect(_client, _userdata, _flags, rc, _properties):
+                    result["rc"] = rc
+                    _client.disconnect()
+            except (AttributeError, TypeError):
+                client = mqtt_client.Client()
+                def on_connect(_client, _userdata, _flags, rc):
+                    result["rc"] = rc
+                    _client.disconnect()
+            
             client.username_pw_set(username, password)
             client.on_connect = on_connect
 
@@ -200,9 +207,10 @@ class UNASProOptionsFlow(config_entries.OptionsFlow):
             from homeassistant.components import mqtt
 
             new_interval = user_input[CONF_SCAN_INTERVAL]
+            topics = get_mqtt_topics(self.config_entry.entry_id)
             await mqtt.async_publish(
                 self.hass,
-                "homeassistant/unas/monitor_interval",
+                f"{topics['control']}/monitor_interval",
                 str(new_interval),
                 qos=0,
                 retain=True,
