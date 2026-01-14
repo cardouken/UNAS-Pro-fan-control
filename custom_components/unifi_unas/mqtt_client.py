@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import json
 from typing import Any
@@ -43,6 +44,9 @@ Examples:
 """
 
 
+REFRESH_DEBOUNCE_SECONDS = 0.5
+
+
 class UNASMQTTClient:
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self.hass = hass
@@ -53,6 +57,7 @@ class UNASMQTTClient:
         self._subscriptions: list = []
         self._status: str = "unknown"
         self._last_update: datetime | None = None
+        self._pending_refresh: asyncio.TimerHandle | None = None
 
     async def async_subscribe(self) -> None:
         if mqtt.DOMAIN not in self.hass.data:
@@ -67,10 +72,25 @@ class UNASMQTTClient:
             _LOGGER.error("Failed to subscribe to %s/#: %s", self.mqtt_root, err)
 
     async def async_unsubscribe(self) -> None:
+        if self._pending_refresh:
+            self._pending_refresh.cancel()
+            self._pending_refresh = None
+        count = len(self._subscriptions)
         for unsub in self._subscriptions:
             unsub()
         self._subscriptions.clear()
-        _LOGGER.debug("Unsubscribed from %d MQTT topics", len(self._subscriptions))
+        _LOGGER.debug("Unsubscribed from %d MQTT topics", count)
+
+    def _schedule_refresh(self) -> None:
+        if self._pending_refresh:
+            self._pending_refresh.cancel()
+        
+        def do_refresh():
+            self._pending_refresh = None
+            if hasattr(self, "_coordinator") and self._coordinator:
+                self.hass.async_create_task(self._coordinator.async_request_refresh())
+        
+        self._pending_refresh = self.hass.loop.call_later(REFRESH_DEBOUNCE_SECONDS, do_refresh)
 
     @callback
     def _handle_message(self, msg) -> None:
@@ -97,8 +117,7 @@ class UNASMQTTClient:
         if parts[0] == "availability":
             self._status = payload
             _LOGGER.debug("UNAS status: %s", self._status)
-            if hasattr(self, "_coordinator") and self._coordinator:
-                self.hass.async_create_task(self._coordinator.async_request_refresh())
+            self._schedule_refresh()
 
     def _handle_two_part(self, parts, payload):
         category, item = parts[0], parts[1]
@@ -154,18 +173,14 @@ class UNASMQTTClient:
         self._data[key] = value
         self._data_timestamps[key] = datetime.now()
         self._last_update = datetime.now()
-
-        if hasattr(self, "_coordinator") and self._coordinator:
-            self.hass.async_create_task(self._coordinator.async_request_refresh())
+        self._schedule_refresh()
 
     def _store_attributes(self, key: str, payload: str) -> None:
         try:
             self._data[f"{key}_attributes"] = json.loads(payload)
             self._data_timestamps[f"{key}_attributes"] = datetime.now()
             self._last_update = datetime.now()
-
-            if hasattr(self, "_coordinator") and self._coordinator:
-                self.hass.async_create_task(self._coordinator.async_request_refresh())
+            self._schedule_refresh()
         except json.JSONDecodeError:
             _LOGGER.warning("Failed to parse JSON attributes for %s", key)
 
