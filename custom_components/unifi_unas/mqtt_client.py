@@ -167,15 +167,18 @@ class UNASMQTTClient:
     def _store_value(self, key: str, payload: str) -> None:
         if not payload:
             return
-        
+
         value: str | int | float = payload
-        try:
-            if "." in payload and payload.replace(".", "", 1).replace("-", "", 1).isdigit():
+        if "." in payload:
+            try:
                 value = float(payload)
-            elif payload.lstrip("-").isdigit():
+            except ValueError:
+                pass
+        else:
+            try:
                 value = int(payload)
-        except (ValueError, TypeError):
-            pass
+            except ValueError:
+                pass
 
         self._data[key] = value
         self._data_timestamps[key] = datetime.now()
