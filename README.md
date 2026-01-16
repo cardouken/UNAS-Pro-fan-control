@@ -94,7 +94,7 @@ improve device support!
 
 - **Fan Mode** (Select) - UNAS Managed / Custom Curve / Set Speed
 - **Fan Speed** (Number) - Manual speed control, 0-100% (only in "Set Speed" mode)
-- **Fan Curve Parameters** (Numbers) - Min/max temperature (30-60°C), min/max fan speed (0-100%)
+- **Fan Curve Parameters** (Numbers) - Min/max temperature (20-60°C), min/max fan speed (0-100%)
 
 ### Buttons
 

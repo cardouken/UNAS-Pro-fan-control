@@ -19,9 +19,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # fan curve parameter definitions: (key, name, min, max, default, unit, icon)
 FAN_CURVE_PARAMS = [
-    ("min_temp", "Min Temperature", 30, 50, 43, "°C", "mdi:thermometer-low"),
-    ("max_temp", "Max Temperature", 45, 60, 47, "°C", "mdi:thermometer-high"),
-    ("min_fan", "Min Fan Speed", 0, 100, 80, "%", "mdi:fan-speed-1"),
+    ("min_temp", "Min Temperature", 20, 50, 40, "°C", "mdi:thermometer-low"),
+    ("max_temp", "Max Temperature", 30, 60, 50, "°C", "mdi:thermometer-high"),
+    ("min_fan", "Min Fan Speed", 0, 100, 30, "%", "mdi:fan-speed-1"),
     ("max_fan", "Max Fan Speed", 0, 100, 100, "%", "mdi:fan-speed-3"),
 ]
 
