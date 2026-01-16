@@ -30,8 +30,6 @@ Monitoring and fan control for UniFi UNAS with native Home Assistant integration
 
 ## Known Limitations
 
-- **Single Device Only** - Currently supports one UNAS device per Home Assistant instance. Multi-device support is
-  planned in an upcoming release.
 - **Device Model** - Cannot be changed after initial setup. Changing requires removing and re-adding the integration.
 
 ## Supported Devices
