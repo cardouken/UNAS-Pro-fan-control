@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/release/cardouken/homeassistant-unifi-unas.svg)](https://github.com/cardouken/homeassistant-unifi-unas/releases)
-[![License](https://img.shields.io/github/license/cardouken/homeassistant-unifi-unas.svg)](LICENSE.md)
+[![License](https://img.shields.io/github/license/cardouken/homeassistant-unifi-unas.svg)](https://github.com/cardouken/homeassistant-unifi-unas/blob/main/LICENSE.md)
 [![GitHub Stars](https://img.shields.io/github/stars/cardouken/homeassistant-unifi-unas.svg)](https://github.com/cardouken/homeassistant-unifi-unas/stargazers)
 
 Monitoring and fan control for UniFi UNAS with native Home Assistant integration.
