@@ -43,7 +43,7 @@ Monitoring and fan control for UniFi UNAS with native Home Assistant integration
 <details>
 <summary><strong>Help confirm device support!</strong></summary>
 
-If you own a UNAS Pro 8, UNAS Pro 4, UNAS 4, or UNAS 2, you can help confirm drive bay mappings by running this command
+If you own a UNAS Pro 4, UNAS 4, or UNAS 2, you can help confirm drive bay mappings by running this command
 on your UNAS via SSH:
 
 ```bash
