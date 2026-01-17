@@ -356,7 +356,21 @@ class UNASMonitor:
             for attr in data.get('ata_smart_attributes', {}).get('table', []):
                 name = attr.get('name', '').lower()
                 if name == 'power_on_hours':
-                    drive['power_on_hours'] = attr.get('raw', {}).get('value', 0)
+                    # smartctl JSON: raw.value can be vendor-packed; prefer decoded hours
+                    poh = (data.get('power_on_time') or {}).get('hours')
+                    if isinstance(poh, (int, float)) and poh > 0:
+                        drive['power_on_hours'] = int(poh)
+                    else:
+                        raw = attr.get('raw') or {}
+                        # raw.string looks like: "40311 (52 181 0)"
+                        s = raw.get('string', '')
+                        if isinstance(s, str) and s:
+                            try:
+                                drive['power_on_hours'] = int(s.split()[0])
+                            except (ValueError, IndexError):
+                                drive['power_on_hours'] = int(raw.get('value', 0) or 0)
+                        else:
+                            drive['power_on_hours'] = int(raw.get('value', 0) or 0)
                 elif name == 'reallocated_sector_ct':
                     drive['bad_sectors'] = attr.get('raw', {}).get('value', 0)
 
