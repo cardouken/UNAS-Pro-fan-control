@@ -358,7 +358,7 @@ class UNASMonitor:
                 if name == 'power_on_hours':
                     # smartctl JSON: raw.value can be vendor-packed; prefer decoded hours
                     poh = (data.get('power_on_time') or {}).get('hours')
-                    if isinstance(poh, (int, float)) and poh > 0:
+                    if isinstance(poh, (int, float)) and poh >= 0:
                         drive['power_on_hours'] = int(poh)
                     else:
                         raw = attr.get('raw') or {}
