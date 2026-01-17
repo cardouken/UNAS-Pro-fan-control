@@ -31,6 +31,9 @@ Monitoring and fan control for UniFi UNAS with native Home Assistant integration
 ## Known Limitations
 
 - **Device Model** - Cannot be changed after initial setup. Changing requires removing and re-adding the integration.
+- **Storage Pool Names** - Pool names cannot be retrieved via SSH. Pools are numbered based on their underlying volume
+  UUID (sorted alphabetically), which in some cases may not match the names shown in UniFi Drive. If pool names are
+  incorrect, simply rename the entities in Home Assistant.
 
 ## Supported Devices
 
@@ -78,11 +81,13 @@ improve device support!
 
 ### Sensors
 
-- **System** - CPU temperature & usage, memory usage, disk I/O throughput, fan speed (PWM & percentage), uptime, OS version
+- **System** - CPU temperature & usage, memory usage, disk I/O throughput, fan speed (PWM & percentage), uptime, OS
+  version
 - **Drives (HDD)** - Temperature, SMART health status, model, serial, firmware, RPM, power-on hours, bad sectors
 - **Drives (NVMe)** - Temperature, SMART health, percentage used (wear), available spare, media errors, unsafe shutdowns
 - **Storage** - Pool usage, size, available space
-- **Network** - SMB connection count (with client details as attributes), NFS mount count (with share details as attributes)
+- **Network** - SMB connection count (with client details as attributes), NFS mount count (with share details as
+  attributes)
 
 ### Binary Sensors
 
@@ -109,18 +114,18 @@ improve device support!
 ### Prerequisites
 
 1. **MQTT Integration** (Required) - Must be installed **before** adding UniFi UNAS
-   - Settings → Devices & Services → Add Integration → MQTT
-   - If using Mosquitto add-on: Select automatic discovery
-   - If using external broker: Enter broker details manually
+    - Settings → Devices & Services → Add Integration → MQTT
+    - If using Mosquitto add-on: Select automatic discovery
+    - If using external broker: Enter broker details manually
 
 2. **Mosquitto MQTT Broker** (Recommended)
-   - Settings → Add-ons → Add-on Store → Mosquitto broker
-   - Install, start, and enable "Start on boot"
-   - Configure login credentials under Mosquitto broker add-on → Configuration → Options → Logins
-   - **Note**: You can use any MQTT broker, but Mosquitto add-on is easiest
+    - Settings → Add-ons → Add-on Store → Mosquitto broker
+    - Install, start, and enable "Start on boot"
+    - Configure login credentials under Mosquitto broker add-on → Configuration → Options → Logins
+    - **Note**: You can use any MQTT broker, but Mosquitto add-on is easiest
 
 3. **SSH Access to UNAS**
-   - Enable SSH access in UniFi Drive via Settings → Control Plane → Console → check "SSH" and configure password
+    - Enable SSH access in UniFi Drive via Settings → Control Plane → Console → check "SSH" and configure password
 
 ### Install Integration
 
@@ -145,6 +150,7 @@ Or manually: HACS → Integrations → Search "UniFi UNAS" → Download → Rest
 Or manually: Settings → Devices & Services → Add Integration → Search "UniFi UNAS"
 
 Enter details:
+
 - **Host**: UNAS IP (e.g., `192.168.1.25`)
 - **Username**: `root`
 - **Password**: Your UNAS SSH password
@@ -186,11 +192,11 @@ min ┤─╱
 
 **Example presets:**
 
-| Preset | Min Temp | Max Temp | Min Fan | Max Fan |
-|--------|----------|----------|---------|---------|
-| Quiet | 40°C | 50°C | 15% | 30% |
-| Balanced | 38°C | 48°C | 30% | 70% |
-| Aggressive | 35°C | 45°C | 70% | 100% |
+| Preset     | Min Temp | Max Temp | Min Fan | Max Fan |
+|------------|----------|----------|---------|---------|
+| Quiet      | 40°C     | 50°C     | 15%     | 30%     |
+| Balanced   | 38°C     | 48°C     | 30%     | 70%     |
+| Aggressive | 35°C     | 45°C     | 70%     | 100%    |
 
 ### 3. Set Speed
 
@@ -203,6 +209,7 @@ Lock fans to a fixed speed (0-100%). Use the Fan Speed slider to set the desired
 Check logs: Settings → System → Logs → search "unifi_unas"
 
 Common issues:
+
 - **Cannot connect** → Verify UNAS IP and root password
 - **Timeout** → Check SSH access (port 22)
 - **Permission denied** → Must use `root` account
@@ -224,7 +231,8 @@ New or moved drives may take up to 60 seconds to appear (grace period for detect
 
 ### Wrong Bay Numbers
 
-Your device model may have incorrect bay mappings. See [Supported Devices](#supported-devices) section to help confirm mappings.
+Your device model may have incorrect bay mappings. See [Supported Devices](#supported-devices) section to help confirm
+mappings.
 
 ### MQTT Integration Removed
 
@@ -232,7 +240,8 @@ If you remove the MQTT integration after setup, a repair issue will appear. Rein
 
 ### After Firmware Update
 
-Scripts redeploy automatically on startup if missing. If needed, manually reinstall via the "Reinstall Scripts" button on the device page.
+Scripts redeploy automatically on startup if missing. If needed, manually reinstall via the "Reinstall Scripts" button
+on the device page.
 
 ### Removing Integration
 
@@ -288,14 +297,17 @@ logger:
 <summary><strong>Script Locations</strong></summary>
 
 Scripts are deployed to `/root/` on the UNAS:
+
 - `/root/unas_monitor.py` - Monitoring script
 - `/root/fan_control.sh` - Fan control script
 
 Systemd service files:
+
 - `/etc/systemd/system/unas_monitor.service`
 - `/etc/systemd/system/fan_control.service`
 
 Manual service control:
+
 ```bash
 systemctl status unas_monitor fan_control
 systemctl restart unas_monitor
