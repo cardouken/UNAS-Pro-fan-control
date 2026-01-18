@@ -129,7 +129,7 @@ improve device support!
     - Settings → Add-ons → Add-on Store → Mosquitto broker
     - Install, start, and enable "Start on boot"
     - Configure login credentials under Mosquitto broker add-on → Configuration → Options → Logins
-    - **Note**: You can use any MQTT broker, but Mosquitto add-on is easiest
+    - **Note**: You can use any MQTT broker, but Mosquitto add-on is easiest. Authentication (username/password) is required.
 
 3. **SSH Access to UNAS**
     - Enable SSH access in UniFi Drive via Settings → Control Plane → Console → check "SSH" and configure password
@@ -161,9 +161,9 @@ Enter details:
 - **Host**: UNAS IP (e.g., `192.168.1.25`)
 - **Username**: `root`
 - **Password**: Your UNAS SSH password
-- **MQTT Host**: Home Assistant IP (e.g., `192.168.1.111`)
-- **MQTT User**: Your Mosquitto username configured earlier in the add-on
-- **MQTT Password**: Your Mosquitto password configured earlier in the add-on
+- **MQTT Host**: IP address of your MQTT broker (e.g., `192.168.1.111`, will be your HA IP if using Mosquitto add-on)
+- **MQTT User**: Your Mosquitto username (required)
+- **MQTT Password**: Your Mosquitto password (required)
 - **Device Model**: Select your UNAS model from the dropdown
 - **Polling Interval**: How often to poll for metrics (5-60 seconds)
 
