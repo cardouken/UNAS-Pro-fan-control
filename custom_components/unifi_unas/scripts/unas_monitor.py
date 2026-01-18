@@ -71,6 +71,13 @@ BAY_MAPPINGS = {
     "UNAS_2": {
         "1": "1",
         "2": "2"
+    },
+    # UNVR - user-reported mapping from issue #11
+    "UNVR": {
+        "1": "1",
+        "3": "2",
+        "5": "3",
+        "7": "4"
     }
 }
 
@@ -165,7 +172,10 @@ class UNASMonitor:
             data['uptime'] = int(float(f.read().split()[0]))
 
         data['os_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-core']).strip()
-        data['drive_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-drive']).strip()
+        if DEVICE_MODEL == "UNVR":
+            data['protect_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-protect']).strip()
+        else:
+            data['drive_version'] = self.run_cmd(['dpkg-query', '-W', '-f=${Version}', 'unifi-drive']).strip()
         data['cpu_usage'] = self.get_cpu_usage()
         data['disk_read'], data['disk_write'] = self.get_disk_throughput()
 
@@ -588,33 +598,35 @@ class UNASMonitor:
             for key, value in pool.items():
                 self.publish_pool(pool_num, key, value)
 
-        smb_connections = self.get_smb_connections()
-        smb_shares = self.get_smb_shares()
+        # UNVR doesn't have SMB/NFS shares
+        if DEVICE_MODEL != "UNVR":
+            smb_connections = self.get_smb_connections()
+            smb_shares = self.get_smb_shares()
 
-        smb_data = {
-            'count': len(smb_shares),
-            'clients': []
-        }
+            smb_data = {
+                'count': len(smb_shares),
+                'clients': []
+            }
 
-        for share in smb_shares:
-            conn = smb_connections.get(share['pid'], {})
-            smb_data['clients'].append({
-                'username': conn.get('username', 'unknown'),
-                'ip': share['ip'],
-                'share': share['share']
-            })
+            for share in smb_shares:
+                conn = smb_connections.get(share['pid'], {})
+                smb_data['clients'].append({
+                    'username': conn.get('username', 'unknown'),
+                    'ip': share['ip'],
+                    'share': share['share']
+                })
 
-        self.mqtt.publish(f"{MQTT_SMB}/connections", str(smb_data['count']), retain=True)
-        self.mqtt.publish(f"{MQTT_SMB}/clients", json.dumps(smb_data['clients']), retain=True)
+            self.mqtt.publish(f"{MQTT_SMB}/connections", str(smb_data['count']), retain=True)
+            self.mqtt.publish(f"{MQTT_SMB}/clients", json.dumps(smb_data['clients']), retain=True)
 
-        nfs_mounts = self.get_nfs_mounts()
-        nfs_data = {
-            'count': len(nfs_mounts),
-            'clients': nfs_mounts
-        }
+            nfs_mounts = self.get_nfs_mounts()
+            nfs_data = {
+                'count': len(nfs_mounts),
+                'clients': nfs_mounts
+            }
 
-        self.mqtt.publish(f"{MQTT_NFS}/mounts", str(nfs_data['count']), retain=True)
-        self.mqtt.publish(f"{MQTT_NFS}/clients", json.dumps(nfs_data['clients']), retain=True)
+            self.mqtt.publish(f"{MQTT_NFS}/mounts", str(nfs_data['count']), retain=True)
+            self.mqtt.publish(f"{MQTT_NFS}/clients", json.dumps(nfs_data['clients']), retain=True)
 
         drive_temps = [d.get('temperature', 0) for d in drives if 'temperature' in d]
         nvme_temps = [n.get('temperature', 0) for n in nvmes if 'temperature' in n]

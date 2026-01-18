@@ -13,7 +13,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN, get_mqtt_topics
+from .const import CONF_DEVICE_MODEL, DOMAIN, get_device_info, get_mqtt_topics
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,11 +71,12 @@ class UNASFanSpeedNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
         self._unsubscribe_speed = None
         self._unsubscribe_mode = None
 
+        device_name, device_model = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="UNAS",
+            name=device_name,
             manufacturer="Ubiquiti",
-            model="UniFi UNAS",
+            model=device_model,
         )
 
     async def async_added_to_hass(self) -> None:
@@ -197,11 +198,12 @@ class UNASFanCurveNumber(CoordinatorEntity, NumberEntity):
 
         self._mqtt_topic = f"{self._topics['control']}/fan/curve/{key}"
 
+        device_name, device_model = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="UNAS",
+            name=device_name,
             manufacturer="Ubiquiti",
-            model="UniFi UNAS",
+            model=device_model,
         )
 
     async def async_added_to_hass(self) -> None:

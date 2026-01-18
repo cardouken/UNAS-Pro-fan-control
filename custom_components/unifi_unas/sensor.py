@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN
+from .const import CONF_DEVICE_MODEL, DOMAIN, get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +125,7 @@ UNAS_SENSORS = [
     ),
     ("unas_os_version", "UniFi OS Version", None, None, None, "mdi:information"),
     ("unas_drive_version", "UniFi Drive Version", None, None, None, "mdi:information"),
+    ("unas_protect_version", "UniFi Protect Version", None, None, None, "mdi:information"),
 ]
 
 # storage pool sensor patterns (will be created dynamically for each pool)
@@ -223,12 +224,19 @@ async def async_setup_entry(
         async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: UNASDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    device_model = entry.data[CONF_DEVICE_MODEL]
+
+    if device_model == "UNVR":
+        excluded = {"unas_smb_connections", "unas_nfs_mounts", "unas_drive_version"}
+    else:
+        excluded = {"unas_protect_version"}
 
     entities = []
 
     for mqtt_key, name, unit, device_class, state_class, icon in UNAS_SENSORS:
-        entities.append(
-            UNASSensor(coordinator, mqtt_key, name, unit, device_class, state_class, icon))
+        if mqtt_key not in excluded:
+            entities.append(
+                UNASSensor(coordinator, mqtt_key, name, unit, device_class, state_class, icon))
 
     entities.append(UNASFanCurveVisualizationSensor(coordinator))
 
@@ -459,11 +467,12 @@ class UNASSensor(CoordinatorEntity, SensorEntity):
             elif unit == "MB":
                 self._attr_suggested_unit_of_measurement = UnitOfInformation.GIGABYTES
 
+        device_name, device_model = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="UNAS",
+            name=device_name,
             manufacturer="Ubiquiti",
-            model="UniFi UNAS",
+            model=device_model,
         )
 
     @callback
@@ -496,11 +505,12 @@ class UNASFanCurveVisualizationSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_curve_viz"
         self._attr_icon = "mdi:chart-line"
 
+        device_name, device_model = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="UNAS",
+            name=device_name,
             manufacturer="Ubiquiti",
-            model="UniFi UNAS",
+            model=device_model,
         )
 
     @callback
@@ -602,9 +612,10 @@ class UNASNVMeSensor(CoordinatorEntity, SensorEntity):
         model = mqtt_data.get(f"unas_nvme_{nvme_slot}_model", "Unknown")
         serial = mqtt_data.get(f"unas_nvme_{nvme_slot}_serial", "")
 
+        device_name, _ = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_nvme_{nvme_slot}")},
-            name=f"UNAS NVMe {nvme_slot}",
+            name=f"{device_name} NVMe {nvme_slot}",
             manufacturer=model.split()[0] if model != "Unknown" else "Unknown",
             model=model,
             serial_number=serial,
@@ -660,9 +671,10 @@ class UNASDriveSensor(CoordinatorEntity, SensorEntity):
         model = mqtt_data.get(f"unas_hdd_{bay_num}_model", "Unknown")
         serial = mqtt_data.get(f"unas_hdd_{bay_num}_serial", "")
 
+        device_name, _ = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_hdd_{bay_num}")},
-            name=f"UNAS HDD {bay_num}",
+            name=f"{device_name} HDD {bay_num}",
             manufacturer=model.split()[0] if model != "Unknown" else "Unknown",
             model=model,
             serial_number=serial,

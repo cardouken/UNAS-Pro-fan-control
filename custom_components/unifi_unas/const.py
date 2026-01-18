@@ -27,7 +27,15 @@ DEVICE_MODELS = {
     "UNAS_PRO_4": "UNAS Pro 4",
     "UNAS_4": "UNAS 4",
     "UNAS_2": "UNAS 2",
+    "UNVR": "UNVR",
 }
+
+
+def get_device_info(device_model: str) -> tuple[str, str]:
+    if device_model == "UNVR":
+        return "UNVR", "UniFi UNVR"
+    return "UNAS", "UniFi UNAS"
+
 
 # MQTT topic structure
 def get_mqtt_root(entry_id: str) -> str:

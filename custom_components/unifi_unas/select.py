@@ -12,20 +12,14 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components import mqtt
 
 from . import UNASDataUpdateCoordinator
-from .const import DOMAIN, get_mqtt_topics
+from .const import CONF_DEVICE_MODEL, DOMAIN, get_device_info, get_mqtt_topics
 
 DEFAULT_FAN_SPEED_50_PCT = 128
 
 _LOGGER = logging.getLogger(__name__)
 
-MODE_UNAS_MANAGED = "UNAS Managed"
 MODE_CUSTOM_CURVE = "Custom Curve"
 MODE_SET_SPEED = "Set Speed"
-
-MODE_MAP = {
-    "unas_managed": MODE_UNAS_MANAGED,
-    "auto": MODE_CUSTOM_CURVE,
-}
 
 
 async def async_setup_entry(
@@ -46,16 +40,18 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
         self._attr_name = "Fan Mode"
         self._attr_unique_id = f"{coordinator.entry.entry_id}_fan_mode"
         self._attr_icon = "mdi:fan-auto"
-        self._attr_options = [MODE_UNAS_MANAGED, MODE_CUSTOM_CURVE, MODE_SET_SPEED]
         self._current_option = None
         self._last_pwm = None
         self._unsubscribe = None
 
+        device_name, device_model = get_device_info(coordinator.entry.data[CONF_DEVICE_MODEL])
+        self._mode_managed = f"{device_name} Managed"
+        self._attr_options = [self._mode_managed, MODE_CUSTOM_CURVE, MODE_SET_SPEED]
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="UNAS",
+            name=device_name,
             manufacturer="Ubiquiti",
-            model="UniFi UNAS",
+            model=device_model,
         )
 
     async def async_added_to_hass(self) -> None:
@@ -74,15 +70,17 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
 
             await self._publish_mode(mqtt_mode)
         else:
-            self._current_option = MODE_UNAS_MANAGED
+            self._current_option = self._mode_managed
             await self._publish_mode("unas_managed")
 
         @callback
         def message_received(msg):
             payload = msg.payload
-            
-            if payload in MODE_MAP:
-                self._current_option = MODE_MAP[payload]
+
+            if payload == "unas_managed":
+                self._current_option = self._mode_managed
+            elif payload == "auto":
+                self._current_option = MODE_CUSTOM_CURVE
             elif payload.isdigit():
                 self._current_option = MODE_SET_SPEED
                 try:
@@ -90,7 +88,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
                 except (ValueError, TypeError):
                     pass
             else:
-                self._current_option = MODE_UNAS_MANAGED
+                self._current_option = self._mode_managed
 
             self.async_write_ha_state()
 
@@ -134,7 +132,7 @@ class UNASFanModeSelect(CoordinatorEntity, SelectEntity, RestoreEntity):
     async def async_select_option(self, option: str) -> None:
         await self._ensure_service_running()
 
-        if option == MODE_UNAS_MANAGED:
+        if option == self._mode_managed:
             await self._publish_mode("unas_managed")
         elif option == MODE_CUSTOM_CURVE:
             await self._publish_mode("auto")
