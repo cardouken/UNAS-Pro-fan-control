@@ -116,6 +116,49 @@ improve device support!
 
 ![dashboard](dashboard.png)
 
+<details>
+<summary><strong>Dashboard Card YAML</strong></summary>
+
+The YAML for this dashboard card is included in [`card.yaml`](card.yaml). Credit to [/u/Imaginary_Explorer99 on Reddit](https://www.reddit.com/r/synology/comments/1gwpq15/home_assistant_synology_integration_dashboard/lyazspd/) for the original concept.
+
+**Prerequisites:**
+
+The card uses the following custom cards from HACS:
+- [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom)
+- [card-mod](https://github.com/thomasloven/lovelace-card-mod)
+
+**Adding the card to your dashboard:**
+
+1. Create a new **Section** on your dashboard
+2. Click **Edit Section**
+3. Click the **ellipsis (⋮)** menu
+4. Select **Edit in YAML**
+5. Paste the contents of `card.yaml`
+6. Save
+
+**Average Drive Temperature Sensor:**
+
+The card includes an average drive temperature sensor that isn't part of the integration. To use it, add this template sensor to your `configuration.yaml`:
+
+```yaml
+template:
+  - sensor:
+      - name: "UNAS Average Drive Temperature"
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {% set temps = states.sensor
+            | selectattr('entity_id', 'search', 'sensor\.unas_hdd_\d+_temperature')
+            | map(attribute='state') | map('float', 'none') | reject('none') | list %}
+          {{ temps | average | round(1) if temps else 'unavailable' }}
+```
+
+After adding, restart Home Assistant or reload template entities.
+
+**Note:** The card is configured for a 6-drive UNAS Pro. Adjust the drive headings and entity IDs to match your setup.
+
+</details>
+
 ## Installation
 
 ### Prerequisites
