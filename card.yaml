@@ -1,0 +1,367 @@
+type: grid
+cards:
+  - type: heading
+    heading_style: title
+    heading: UNAS Pro
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_fan_speed_percent
+        color: blue
+        tap_action:
+          action: more-info
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_cpu_temperature
+        color: orange
+        tap_action:
+          action: more-info
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_cpu_usage
+        color: orange
+        icon: mdi:cpu-64-bit
+        tap_action:
+          action: more-info
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_memory_used
+        color: blue
+        icon: mdi:memory
+        tap_action:
+          action: more-info
+  - type: custom:mushroom-select-card
+    entity: select.unas_fan_mode
+    primary_info: name
+    secondary_info: last-updated
+  - type: custom:mushroom-number-card
+    entity: number.unas_fan_speed
+    fill_container: false
+    icon: mdi:fan
+    display_mode: slider
+    name: Fan Speed
+    card_mod:
+      style:
+        mushroom-number-value-control$: |
+          :host {
+            {% if is_state('switch.unas_fan_auto_mode', 'on') %}
+              pointer-events: none;
+              opacity: 0.6;
+            {% endif %}
+          }
+  - type: tile
+    entity: sensor.unas_disk_read
+    name: Read
+    icon: mdi:upload
+    color: green
+    vertical: false
+    features_position: bottom
+  - type: tile
+    entity: sensor.unas_disk_write
+    name: Write
+    icon: mdi:download
+    color: red
+    vertical: false
+    features_position: bottom
+  - graph: line
+    type: sensor
+    entity: sensor.unas_storage_pool_1_used
+    name: Used
+    detail: 1
+    hours_to_show: 8
+  - graph: line
+    type: sensor
+    entity: sensor.unas_storage_pool_1_available
+    name: Available
+    detail: 1
+    hours_to_show: 8
+  - type: heading
+    heading: Storage Pool 1
+    heading_style: title
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_average_drive_temperature
+        color: orange
+        tap_action:
+          action: more-info
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_storage_pool_1_usage
+        color: cyan
+        tap_action:
+          action: more-info
+        icon: mdi:harddisk
+      - type: entity
+        show_state: true
+        show_icon: true
+        color: cyan
+        entity: sensor.unas_storage_pool_1_used
+        tap_action:
+          action: more-info
+    icon: ""
+  - type: heading
+    icon: mdi:harddisk
+    heading: Drive 1
+    heading_style: subtitle
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_1_temperature
+        color: orange
+        tap_action:
+          action: more-info
+        icon: mdi:thermometer
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_1_status
+        color: green
+        tap_action:
+          action: more-info
+        icon: ""
+        style: |
+          :host {
+            --icon-color: {% if is_state('sensor.unas_hdd_1_status', 'Optimal') %}var(--green-color){% else %}var(--red-color){% endif %} !important;
+          }
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_1_power_on_hours
+        color: cyan
+        tap_action:
+          action: more-info
+        icon: ""
+    card_mod:
+      style: |
+        hui-heading-badge:nth-child(2) {
+          min-width: 71px !important;
+        }
+        hui-heading-badge:nth-child(3) {
+          min-width: 63px !important;
+        }
+  - type: heading
+    icon: mdi:harddisk
+    heading: Drive 2
+    heading_style: subtitle
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_2_temperature
+        color: orange
+        tap_action:
+          action: more-info
+        icon: mdi:thermometer
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_2_status
+        color: green
+        tap_action:
+          action: more-info
+        icon: ""
+        style: |
+          :host {
+            --icon-color: {% if is_state('sensor.unas_hdd_2_status', 'Optimal') %}var(--green-color){% else %}var(--red-color){% endif %} !important;
+          }
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_2_power_on_hours
+        color: cyan
+        tap_action:
+          action: more-info
+    card_mod:
+      style: |
+        hui-heading-badge:nth-child(2) {
+          min-width: 71px !important;
+        }
+        hui-heading-badge:nth-child(3) {
+          min-width: 63px !important;
+        }
+  - type: heading
+    icon: mdi:harddisk
+    heading: Drive 3
+    heading_style: subtitle
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_3_temperature
+        color: orange
+        tap_action:
+          action: more-info
+        icon: mdi:thermometer
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_3_status
+        color: green
+        tap_action:
+          action: more-info
+        icon: ""
+        style: |
+          :host {
+            --icon-color: {% if is_state('sensor.unas_hdd_3_status', 'Optimal') %}var(--green-color){% else %}var(--red-color){% endif %} !important;
+          }
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_3_power_on_hours
+        color: cyan
+        tap_action:
+          action: more-info
+    card_mod:
+      style: |
+        hui-heading-badge:nth-child(2) {
+          min-width: 71px !important;
+        }
+        hui-heading-badge:nth-child(3) {
+          min-width: 63px !important;
+        }
+  - type: heading
+    icon: mdi:harddisk
+    heading: Drive 4
+    heading_style: subtitle
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_4_temperature
+        color: orange
+        tap_action:
+          action: more-info
+        icon: mdi:thermometer
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_4_status
+        color: green
+        tap_action:
+          action: more-info
+        icon: ""
+        style: |
+          :host {
+            --icon-color: {% if is_state('sensor.unas_hdd_4_status', 'Optimal') %}var(--green-color){% else %}var(--red-color){% endif %} !important;
+          }
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_4_power_on_hours
+        color: cyan
+        tap_action:
+          action: more-info
+    card_mod:
+      style: |
+        hui-heading-badge:nth-child(2) {
+          min-width: 71px !important;
+        }
+        hui-heading-badge:nth-child(3) {
+          min-width: 63px !important;
+        }
+  - type: heading
+    icon: mdi:harddisk
+    heading: Drive 5
+    heading_style: subtitle
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_5_temperature
+        color: orange
+        tap_action:
+          action: more-info
+        icon: mdi:thermometer
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_5_status
+        color: green
+        tap_action:
+          action: more-info
+        icon: ""
+        style: |
+          :host {
+            --icon-color: {% if is_state('sensor.unas_hdd_5_status', 'Optimal') %}var(--green-color){% else %}var(--red-color){% endif %} !important;
+          }
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_5_power_on_hours
+        color: cyan
+        tap_action:
+          action: more-info
+    card_mod:
+      style: |
+        hui-heading-badge:nth-child(2) {
+          min-width: 73px !important;
+        }
+        hui-heading-badge:nth-child(3) {
+          min-width: 65px !important;
+        }
+  - type: heading
+    icon: mdi:harddisk
+    heading: Drive 6
+    heading_style: subtitle
+    badges:
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_6_temperature
+        color: orange
+        tap_action:
+          action: more-info
+        icon: mdi:thermometer
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_6_status
+        color: green
+        tap_action:
+          action: more-info
+        icon: ""
+        card_mod: null
+        style: |
+          :host {
+            --icon-color: {% if is_state('sensor.unas_hdd_6_status', 'Optimal') %}var(--green-color){% else %}var(--red-color){% endif %} !important;
+          }
+      - type: entity
+        show_state: true
+        show_icon: true
+        entity: sensor.unas_hdd_6_power_on_hours
+        color: cyan
+        tap_action:
+          action: more-info
+    card_mod:
+      style: |
+        hui-heading-badge:nth-child(2) {
+          min-width: 73px !important;
+        }
+        hui-heading-badge:nth-child(3) {
+          min-width: 65px !important;
+        }
+  - type: history-graph
+    entities:
+      - entity: sensor.unas_hdd_1_temperature
+        name: HDD1
+      - entity: sensor.unas_hdd_2_temperature
+        name: HDD2
+      - entity: sensor.unas_hdd_3_temperature
+        name: HDD3
+      - entity: sensor.unas_hdd_4_temperature
+        name: HDD4
+      - entity: sensor.unas_hdd_5_temperature
+        name: HDD5
+      - entity: sensor.unas_hdd_6_temperature
+        name: HDD6
+    logarithmic_scale: false
+    hours_to_show: 16
+column_span: 1
